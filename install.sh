@@ -16,6 +16,12 @@ while read df; do
   ln -sf "$df" "$link"
 done
 
+
+#### protoc
+PB_REL="https://github.com/protocolbuffers/protobuf/releases" curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-x86_64.zip
+unzip protoc-30.2-linux-x86_64.zip -d $HOME/.local
+
+
 #### Neovim
 # https://github.com/junegunn/vim-plug
 sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
