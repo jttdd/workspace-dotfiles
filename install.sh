@@ -5,6 +5,7 @@ set -exuo pipefail
 sudo add-apt-repository -y ppa:neovim-ppa/unstable && sudo apt update
 
 sudo apt install -y neovim \
+  ripgrep \
   libevent-dev ncurses-dev ncurses-dev build-essential bison pkg-config # tmux dev dependencies
 
 # Symlink dotfiles to the root within your workspace
@@ -18,7 +19,8 @@ done
 
 
 #### protoc
-PB_REL="https://github.com/protocolbuffers/protobuf/releases" curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-x86_64.zip
+PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-x86_64.zip
 unzip protoc-30.2-linux-x86_64.zip -d $HOME/.local
 
 
@@ -29,6 +31,8 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 
 mkdir -p ~/.config/nvim
 ln -sf ~/.vimrc ~/.config/nvim/init.vim
+
+nvim --headless +PlugInstall +qa
 
 #### Tmux
 wget https://github.com/tmux/tmux/releases/download/3.5a/tmux-3.5a.tar.gz
@@ -81,5 +85,6 @@ git config --global include.path "~/.gitconfig-ext"
 #### Rust
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+rustup component add rust-analyzer
 
 echo "Success"
