@@ -15,8 +15,6 @@ function gcb
   git checkout -b jeff.lai/$argv
   git branch --edit-description
 end
-alias gd='git diff'
-alias gs='git status'
 alias gcam='ga -A && git commit -a -m'
 alias gca!='ga -A && git commit -a --amend --no-edit'
 
@@ -57,3 +55,17 @@ alias timestamp='date +%Y%m%d%H%M%S'
 function uuid-mysql
   echo $argv | tr -d '-' | sed 's/^/0x/'
 end
+
+# kubectl
+alias k='kubectl'
+
+# ripgrep - glob on file path as well
+# NOTE - this doesn't really work if there are whitespaces in the paths
+function rgfiles
+  set path $argv[1]
+  set content $argv[2]
+  rg --files | rg "$path" | xargs rg "$content"
+end
+
+# cd to git root
+alias cdroot='cd (git rev-parse --show-toplevel)'

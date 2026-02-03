@@ -4,11 +4,13 @@ export HOMEBREW_CASK_OPTS=--require-sha
 export HOMEBREW_DIR=/opt/homebrew
 export HOMEBREW_BIN=/opt/homebrew/bin
 
-# Load python shims
-# eval "$(pyenv init -)"
+function load-shims
+  # Load python shims
+  eval "$(pyenv init -)"
 
-# Load ruby shims
-# eval "$(rbenv init -)"
+  # Load ruby shims
+  eval "$(rbenv init -)"
+end
 
 # Prefer GNU binaries to Macintosh binaries.
 export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
@@ -21,6 +23,9 @@ export GOPATH="$HOME/go"
 
 # Add binaries that are go install-ed to PATH
 export PATH="$GOPATH/bin:$PATH"
+
+# Volta (NPM)
+export PATH="$HOME/.volta/bin:$PATH"
 
 # Point DATADOG_ROOT to ~/dd symlink
 export DATADOG_ROOT="$HOME/dd"
@@ -49,3 +54,11 @@ export GOPROXY=binaries.ddbuild.io,https://proxy.golang.org,direct
 export GONOSUMDB=github.com/DataDog,go.ddbuild.io
 # END ANSIBLE MANAGED BLOCK
 # export GITLAB_TOKEN=$(security find-generic-password -a $USER -s gitlab_token -w)
+
+alias cdnotes='cd ~/Documents/ddog/notes'
+
+function gh-token
+  set -gx GITHUB_TOKEN (ddtool auth github token)
+  echo $GITHUB_TOKEN
+end
+
