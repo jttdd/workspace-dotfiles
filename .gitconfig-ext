@@ -1,20 +1,29 @@
 [alias]
   # add
-  a = "!f() { git add -A; git status; }; f"
+  a = "add"
+  aa = "!f() { git add -A; git status; }; f"
 
   # branch
 	bb = !~/code/rcfiles/scripts/better-git-branch.sh
 	bl = !~/code/rcfiles/scripts/git-branch-list.sh
+	branch-clean = !~/code/rcfiles/scripts/git-branch-clean.py
 
-  new-branch = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git checkout $default && git pull-head && git checkout -b jeff.lai/$1 && git branch --edit-description; }; f"
+  create-branch = "!f() { branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\"; else git branch \"$branch\" HEAD && git branch --edit-description \"$branch\"; fi; }; f"
+
+  stack-branch = "!f() { current=$(git branch --show-current); if [[ $current =~ -p([0-9]+)$ ]]; then new_number=$((${BASH_REMATCH[1]} + 1)); new_branch=${current%-p*}-p$new_number; else new_branch=\"$current-p1\"; fi; git checkout -b $new_branch; git branch --edit-description; }; f"
+
+  new-branch = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default && branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\" && git checkout \"$branch\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\" && git checkout \"$branch\"; else git branch \"$branch\" origin/$default && git branch --edit-description \"$branch\" && git checkout \"$branch\"; fi; }; f"
 
   current-branch = "!f() { branch=$(git rev-parse --abbrev-ref HEAD) && echo $branch | pbcopy && echo $branch; }; f"
 
+  branch-cleanup = "!git for-each-ref --format='%(refname:short)' refs/heads | rg -wv \"main|libevp-staging|jeff\\.lai.*\" | xargs git branch -D"
+
   # checkout
-  cob = "!f() { git fetch origin $1 && git checkout $1; }; f"
+  cob = "!f() { git fetch origin $1 && git checkout -b $1 origin/$1; }; f"
+  co = "checkout"
 
   # commit
-  fixup = "!git log -n 50 --pretty=format:'%h %s' --no-merges | fzf | cut -c -7 | xargs -o git commit --fixup"
+  fixup = "!git log --author=\"Jeff Lai\" --pretty=format:'%h [%ae] %s' --no-merges -n 10 | rg -v fixup | fzf | cut -c -7 | xargs -o git commit -e --fixup"
   cf = "!f() { git commit -a --fixup=$1; }; f"
 
   # diff
@@ -26,6 +35,8 @@
   l = log
   ll = log --oneline
 
+  focus = "!$DATADOG_ROOT/experimental/teams/language-tools/bin/git-focus"
+
   # status
   s = status
 
@@ -33,10 +44,11 @@
   reset-remote = "!git fetch origin $(git rev-parse --abbrev-ref HEAD) && git reset --hard @{u}"
 
   # rebase
-  rebase-latest = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default:$default && git rebase $default; }; f"
   rebase-remote = "!git fetch origin $(git rev-parse --abbrev-ref HEAD) && git rebase @{u}"
+  rebase-latest = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default:$default && git rebase $default; }; f"
 
-  wip = "commit -am 'WIP' --no-verify"
+  wip = "!git commit -m 'WIP' --no-verify"
+  awip = "!git add -A && git wip"
 
 
 
@@ -44,7 +56,6 @@
 # From: https://blog.gitbutler.com/how-git-core-devs-configure-git/
 
 # clearly makes git better
-
 [column]
         ui = auto
 [branch]
