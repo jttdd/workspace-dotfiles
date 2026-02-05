@@ -10,6 +10,8 @@ Plug 'hrsh7th/cmp-buffer', { 'branch': 'main' }
 Plug 'hrsh7th/cmp-path', { 'branch': 'main' }
 Plug 'hrsh7th/cmp-cmdline', { 'branch': 'main' }
 Plug 'hrsh7th/nvim-cmp', { 'branch': 'main' }
+Plug 'hrsh7th/vim-vsnip'
+Plug 'hrsh7th/vim-vsnip-integ'
 Plug 'ray-x/lsp_signature.nvim'
 
 "rust
@@ -27,6 +29,7 @@ Plug 'edkolev/tmuxline.vim'
 " tpope
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-fugitive'
+Plug 'tpope/vim-rhubarb'
 
 " FZF
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
@@ -51,8 +54,9 @@ set shell=/bin/bash
 let base16colorspace=256
 colorscheme base16-ashes
 
+highlight StatuslineGitBranch guifg=LightGreen
 " full file path on status line
-set statusline+=%F
+set statusline+=%F\ %#StatuslineGitBranch#%{FugitiveHead()}%*
 
 lua << END
 vim.lsp.set_log_level("error")
@@ -88,33 +92,83 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', '<C-p>', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
   buf_set_keymap('n', '<C-n>', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
   buf_set_keymap('n', '<space>q', '<cmd>lua vim.lsp.diagnostic.set_loclist()<CR>', opts)
-  buf_set_keymap("n", "<space>f", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
+  -- buf_set_keymap("n", "<space>f", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
   buf_set_keymap('n', '<space>h', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
+
 
   -- Forward to other plugins
   -- require'completion'.on_attach(client)
 end
 
+local function git_root()
+  local ok, out = pcall(vim.fn.systemlist, "git rev-parse --show-toplevel")
+  if not ok or vim.v.shell_error ~= 0 or not out[1] or out[1] == "" then
+    return nil
+  end
+  return out[1]
+end
+
+local function copy_path_range(start_line, end_line)
+  local abs = vim.fn.expand("%:p")
+  local root = git_root()
+  local rel = abs
+
+  if root and abs:sub(1, #root) == root then
+    rel = abs:sub(#root + 2) -- strip "<root>/"
+  else
+    rel = vim.fn.expand("%:.") -- relative to cwd as fallback
+  end
+
+  local result = string.format("@%s#L%d-%d", rel, start_line, end_line)
+  vim.fn.setreg("+", result)
+  vim.notify(string.format("Copied: %s", result), vim.log.levels.INFO)
+end
+
+vim.api.nvim_create_user_command("CopyPathRange", function(opts)
+  local s, e = opts.line1, opts.line2
+  if s > e then s, e = e, s end
+  copy_path_range(s, e)
+end, { range = true, desc = "Copy file path with line range" })
+
+
+vim.keymap.set("v", "<C-l>", [[:<C-U>CopyPathRange<CR>]], { desc = "Copy file path with line range" })
+
+local root_dir = vim.fn.getcwd()
+
 local servers = { "rust_analyzer" }
 for _, lsp in ipairs(servers) do
   lspconfig[lsp].setup {
+    -- root_dir = vim.fn.getcwd(),
     on_attach = on_attach,
     flags = {
       debounce_text_changes = 150,
     },
     settings = {
-      ["rust_analyzer"] = {
-        -- server_path = "/Users/jeff.lai/code/ra-multiplex/target/release/ra-multiplex",
+      ["rust-analyzer"] = {
+        server_path = "ra-multiplex",
+        check = { command = "clippy" },
         cargo = {
           allFeatures = true,
-          -- noDefaultFeatures = true,
-          -- features = { "minimal" }
-        }
+          targetDir = true,
+        },
+        files = {
+          excludeDirs = {
+            "node_modules",
+            "vendor",
+            "bazel-*",
+            "bazel-bin",
+            "bazel-out",
+            "bazel-testlogs",
+            ".git",
+          },
+        },
       }
     }
   }
 end
 
+-- custom for libstreaming go bindings
+local include_path = root_dir .. "/include"
 lspconfig.gopls.setup {
     root_dir = vim.fn.getcwd(),
     on_attach = on_attach,
@@ -123,35 +177,50 @@ lspconfig.gopls.setup {
     },
     capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities()),
 
+    cmd = { "dd-gopls" },
+    cmd_env = {
+      CGO_ENABLED = "1",
+      CGO_CFLAGS = "-I" .. include_path,
+      CC = "/usr/bin/clang",
+      GOPLS_DISABLE_MODULE_LOADS = 1,
+    },
     settings = {
       gopls = {
-        buildFlags = { "" },
-        env = {
-          -- GOPACKAGESDRIVER = '/Users/jeff.lai/go/src/github.com/DataDog/dd-source/tools/go/gopackagesdriver.sh'
-        },
         directoryFilters = {
-          "-bazel-bin",
-          "-bazel-out",
-          "-bazel-testlogs",
-          "-bazel-mypkg",
+          "-**/node_modules",
+          "-**/vendor",
+          "-**/bazel-*",
+          "-**/bazel-bin",
+          "-**/bazel-out",
+          "-**/bazel-testlogs",
+          "-**/.git",
         },
-        completeUnimported = true,
-        usePlaceholders = true,
         analyses = {
-          unusedparams = true,
+          unusedparams = false,
+          shadow = false,
+          nilness = false,
         },
-        staticcheck = true,
-        gofumpt = true,
+        staticcheck = false,
       },
-    },
+    }
   }
 
 
+vim.diagnostic.config({
+  virtual_text = true,   -- show diagnostics inline
+  signs = true,          -- show signs in the sign column
+  underline = true,      -- underline problematic code
+  update_in_insert = false,
+  severity_sort = true,
+})
+
 vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
   vim.lsp.diagnostic.on_publish_diagnostics, {
-    virtual_text = true,
-    signs = true,
-    update_in_insert = true,
+    virtual_text = true,   -- show diagnostics inline
+    signs = true,          -- show signs in the sign column
+    underline = true,      -- underline problematic code
+    update_in_insert = false,
+    severity_sort = true,
   }
 )
 
@@ -219,14 +288,18 @@ set ffs=unix
 hi MatchParen cterm=none ctermbg=red ctermfg=white
 
 " make pop up menu easier to read
-hi Pmenu ctermbg=grey
-" hi PmenuSel ctermbg=white
+hi Pmenu ctermbg=white
+hi PmenuSel guibg=green guifg=white
+
 
 " show whitespace
 set listchars=eol:$,tab:>-,trail:~,extends:>,precedes:<
 
 " fzf
 set rtp+=~/.fzf
+
+" spellchecker
+set spell
 
 " Set <Leader> to space for easier key combinations
 let mapleader = "\<Space>"
@@ -254,10 +327,57 @@ set clipboard=unnamed
 " nmap <Leader>l :set list!<CR>
 
 " Use rg for file name search
-let $FZF_DEFAULT_COMMAND = 'rg --files --hidden --glob "!.git" .'
+let $FZF_DEFAULT_COMMAND = 'rg --files --hidden --glob "!.git"'
 nnoremap <Leader>n :FZF<CR>
+nnoremap <Leader>m :Files `git rev-parse --show-toplevel`<CR>
+
 " Global file content search
 nnoremap <C-f> :Rg<CR>
+
+function! s:rg_streaming()
+  let l:root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
+  if empty(l:root)
+    let l:root = getcwd()
+  endif
+  let l:dir = fnamemodify(l:root . '/domains/streaming', ':p')
+  call fzf#vim#grep(
+        \ 'rg --column --line-number --no-heading --color=always --smart-case -- ""',
+        \ 1,
+        \ fzf#vim#with_preview({'dir': l:dir, 'options': ['--prompt', 'streaming> ']}),
+        \ 0)
+endfunction
+
+nnoremap <leader>f :call <SID>rg_streaming()<CR>
+
+function! s:files_streaming()
+  let l:root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
+  if empty(l:root)
+    let l:root = getcwd()
+  endif
+  let l:dir = fnamemodify(l:root . '/domains/streaming', ':p')
+  call fzf#vim#files(
+        \ l:dir,
+        \ fzf#vim#with_preview({'options': ['--prompt', 'streaming files> ']}),
+        \ 0)
+endfunction
+
+" Keybinding: <leader>fs
+nnoremap <leader>F :call <SID>files_streaming()<CR>
+
+" fzf-powered cd. either from cwd
+command! -nargs=0 FZFCD call fzf#run({
+  \ 'source': 'find . -type d',
+  \ 'sink':   'cd',
+  \ 'options': '--prompt "cd> "'
+  \ })
+
+nnoremap <leader>c :FZFCD<CR>
+
+" Cd to git root
+command! Cdroot execute 'cd' fnameescape(systemlist('git rev-parse --show-toplevel')[0])
+" Cd to cargo root
+command! Cdcargoroot execute 'cd' fnameescape(fnamemodify(trim(system('cargo locate-project --message-format plain')), ':h'))
+command! Cdcargoroot lua local root=vim.fs.dirname(vim.fs.find('Cargo.toml',{path=vim.api.nvim_buf_get_name(0),upward=true})[1]); if root then vim.cmd('lcd '..vim.fn.fnameescape(root)) end
 
 " Open last buffer with space space
 nnoremap <Leader><Leader> :b#<CR>
@@ -293,8 +413,16 @@ nmap P "ap
 " Necesary  for lots of cool vim things
 set nocompatible
 
+" Insert markdown heading with current datetime
+nnoremap <leader>d i<C-R>=strftime("## %Y-%m-%d %H:%M")<CR><CR><esc>
+
+" Open current file in github
+nmap <Leader>gh :GBrowse<CR>
+
 " This shows what you are typing as a command.
 set showcmd
+
+set shell=/opt/homebrew/bin/fish
 
 " Needed for Syntax Highlighting and stuff
 filetype on " turn on file type detection
@@ -319,8 +447,9 @@ autocmd BufWritePre * %s/\s\+$//e
 " Automatically save file on :make
 set autowrite
 
-" Automatically read file with updates
+" Automatically read file with updates, trigger when buffer in focus
 set autoread
+au FocusGained,BufEnter * :checktime
 
 " Cool tab completion stuff
 set wildmenu
@@ -393,14 +522,28 @@ augroup JumpCursorOnEdit
             \ endif
 augroup END
 
+command! -range=% HexRust <line1>,<line2>s/\v<([0-9A-Fa-f]{2})>/0x\1/g
+
 " Auto save whenever text is changed
 " autocmd TextChanged,TextChangedI <buffer> silent write
 
 " Toggle File Explorer on Ctrl-g
-nnoremap <C-g> :NERDTreeToggle<CR>
+nnoremap <C-g> :call NERDTreeToggleAndRefresh()<CR>
+
+" Refresh file list every time its opened
+function NERDTreeToggleAndRefresh()
+  :NERDTreeToggle
+  if g:NERDTree.IsOpen()
+    :NERDTreeRefreshRoot
+  endif
+endfunction
+
 " find file in dir tree
 nnoremap <leader>g :NERDTreeFind<CR>
 let NERDTreeShowHidden=1
+
+" Sort purely alphabetically, no dir/file grouping
+let g:NERDTreeSortOrder = ['\/$', '*']
 
 " File explorer tree list view
 let g:netrw_liststyle = 3
@@ -414,8 +557,8 @@ let g:netrw_winsize = 25
 " Allow JSX in normal JS files
 let g:jsx_ext_required = 0
 
-" FIXME: Format json with :JsonFormat
-com! JsonFormat '<,'>!python -m json.tool
+" FIXME: Format json with :FormatJson
+com! -range FormatJson <line1>,<line2>!python3 -m json.tool
 
 " Replace selection with base64 decoded string
 :vnoremap <leader>64 c<c-r>=system('base64 --decode', @")<cr><esc>
@@ -430,6 +573,11 @@ autocmd FileType markdown nmap <buffer><silent> <leader>p :call mdip#MarkdownCli
 " Open markdown files with VSCode.
 autocmd BufEnter *.md exe 'noremap <leader>m :!code %:p<CR>'
 
+
+" Copy the git commit hash in the fugitive commit diff buffer
+command! GDiffCommit execute {
+       \ 'let l:sha = matchstr(expand(''%:t''), ''\v[0-9a-f]{7,40}'')' .
+       \ '| if empty(l:sha) | echoerr "No commit hash found" | else | let @+ = l:sha | echo "Copied " . l:sha | endif'
 
 
 " -------------------------------------------------------------------------------------------------
