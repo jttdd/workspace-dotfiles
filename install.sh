@@ -5,6 +5,7 @@ set -exuo pipefail
 sudo add-apt-repository -y ppa:neovim-ppa/unstable && sudo apt update
 
 sudo apt install -y neovim \
+  mosh \
   ripgrep \
   libevent-dev ncurses-dev ncurses-dev build-essential bison pkg-config # tmux dev dependencies
 
@@ -86,5 +87,8 @@ git config --global include.path "~/.gitconfig-ext"
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 rustup component add rust-analyzer
+
+# Start mosh server, it will detach itself
+mosh-server
 
 echo "Success"
