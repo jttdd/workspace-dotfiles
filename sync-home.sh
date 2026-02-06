@@ -31,3 +31,8 @@ NEW_ALIASES=$(awk '/^\[alias\]/{found=1} /^\[/ && found && !/^\[alias\]/{exit} f
 } > "$GITCONFIG_EXT.tmp" && mv "$GITCONFIG_EXT.tmp" "$GITCONFIG_EXT"
 
 echo "Updated git aliases in $GITCONFIG_EXT"
+
+# Copy ~/.claude/CLAUDE.md
+mkdir -p "$SCRIPT_DIR/.claude"
+cp -L ~/.claude/CLAUDE.md "$SCRIPT_DIR/.claude/"
+echo "Copied ~/.claude/CLAUDE.md"
