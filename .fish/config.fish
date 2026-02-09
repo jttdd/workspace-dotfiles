@@ -7,6 +7,8 @@ end
 
 set -gx EDITOR nvim
 
+fish_add_path ~/.local/bin
+
 # Vi mode
 fish_vi_key_bindings
 
