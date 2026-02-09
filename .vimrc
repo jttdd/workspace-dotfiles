@@ -2,8 +2,7 @@
 call plug#begin()
 
 " languages support
-" lsp
-Plug 'neovim/nvim-lspconfig'
+" lsp (nvim 0.11+ has built-in lsp config, no need for nvim-lspconfig)
 Plug 'nvim-lua/lsp_extensions.nvim'
 Plug 'hrsh7th/cmp-nvim-lsp', { 'branch': 'main' }
 Plug 'hrsh7th/cmp-buffer', { 'branch': 'main' }
@@ -59,8 +58,7 @@ highlight StatuslineGitBranch guifg=LightGreen
 set statusline+=%F\ %#StatuslineGitBranch#%{FugitiveHead()}%*
 
 lua << END
-vim.lsp.set_log_level("error")
-local lspconfig = require('lspconfig')
+vim.lsp.log_level = vim.log.levels.ERROR
 local cmp = require'cmp'
 local on_attach = function(client, bufnr)
 
@@ -73,7 +71,9 @@ local on_attach = function(client, bufnr)
   })
 
   local function buf_set_keymap(...) vim.api.nvim_buf_set_keymap(bufnr, ...) end
-  local function buf_set_option(...) vim.api.nvim_buf_set_option(bufnr, ...) end
+  local function buf_set_option(opt, value)
+    vim.api.nvim_set_option_value(opt, value, { buf = bufnr })
+  end
 
   -- Mappings.
   local opts = { noremap=true, silent=true }
@@ -91,7 +91,7 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', '<space>e', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
   buf_set_keymap('n', '<C-p>', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
   buf_set_keymap('n', '<C-n>', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
-  buf_set_keymap('n', '<space>q', '<cmd>lua vim.lsp.diagnostic.set_loclist()<CR>', opts)
+  buf_set_keymap('n', '<space>q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
   -- buf_set_keymap("n", "<space>f", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
   buf_set_keymap('n', '<space>h', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
 
@@ -135,55 +135,53 @@ vim.keymap.set("v", "<C-l>", [[:<C-U>CopyPathRange<CR>]], { desc = "Copy file pa
 
 local root_dir = vim.fn.getcwd()
 
-local servers = { "rust_analyzer" }
-for _, lsp in ipairs(servers) do
-  lspconfig[lsp].setup {
-    -- root_dir = vim.fn.getcwd(),
-    on_attach = on_attach,
-    flags = {
-      debounce_text_changes = 150,
-    },
-    settings = {
-      ["rust-analyzer"] = {
-        server_path = "ra-multiplex",
-        check = { command = "clippy" },
-        cargo = {
-          allFeatures = true,
-          targetDir = true,
+-- Configure rust_analyzer using new vim.lsp.config API
+vim.lsp.config.rust_analyzer = {
+  cmd = { 'lspmux' },
+  filetypes = { 'rust' },
+  root_markers = { 'Cargo.toml' },
+  on_attach = on_attach,
+  settings = {
+    ["rust-analyzer"] = {
+      check = { command = "clippy" },
+      cargo = {
+        allFeatures = true,
+        targetDir = true,
+      },
+      files = {
+        excludeDirs = {
+          "node_modules",
+          "vendor",
+          "bazel-*",
+          "bazel-bin",
+          "bazel-out",
+          "bazel-testlogs",
+          ".git",
         },
-        files = {
-          excludeDirs = {
-            "node_modules",
-            "vendor",
-            "bazel-*",
-            "bazel-bin",
-            "bazel-out",
-            "bazel-testlogs",
-            ".git",
-          },
-        },
-      }
+      },
     }
   }
-end
+}
+
+-- Enable rust_analyzer
+vim.lsp.enable('rust_analyzer')
 
 -- custom for libstreaming go bindings
 local include_path = root_dir .. "/include"
-lspconfig.gopls.setup {
-    root_dir = vim.fn.getcwd(),
-    on_attach = on_attach,
-    flags = {
-      debounce_text_changes = 150,
-    },
-    capabilities = require('cmp_nvim_lsp').default_capabilities(vim.lsp.protocol.make_client_capabilities()),
 
+-- Configure gopls using new vim.lsp.config API
+vim.lsp.config.gopls = {
     cmd = { "dd-gopls" },
     cmd_env = {
       CGO_ENABLED = "1",
       CGO_CFLAGS = "-I" .. include_path,
       CC = "/usr/bin/clang",
-      GOPLS_DISABLE_MODULE_LOADS = 1,
+      GOPLS_DISABLE_MODULE_LOADS = "1",
     },
+    filetypes = { 'go', 'gomod', 'gowork', 'gotmpl' },
+    root_markers = { 'go.work', 'go.mod', '.git' },
+    on_attach = on_attach,
+    capabilities = require('cmp_nvim_lsp').default_capabilities(),
     settings = {
       gopls = {
         directoryFilters = {
@@ -205,6 +203,9 @@ lspconfig.gopls.setup {
     }
   }
 
+-- Enable gopls
+vim.lsp.enable('gopls')
+
 
 vim.diagnostic.config({
   virtual_text = true,   -- show diagnostics inline
@@ -213,16 +214,6 @@ vim.diagnostic.config({
   update_in_insert = false,
   severity_sort = true,
 })
-
-vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
-  vim.lsp.diagnostic.on_publish_diagnostics, {
-    virtual_text = true,   -- show diagnostics inline
-    signs = true,          -- show signs in the sign column
-    underline = true,      -- underline problematic code
-    update_in_insert = false,
-    severity_sort = true,
-  }
-)
 
 cmp.setup({
     snippet = {
@@ -374,10 +365,9 @@ command! -nargs=0 FZFCD call fzf#run({
 nnoremap <leader>c :FZFCD<CR>
 
 " Cd to git root
-command! Cdroot execute 'cd' fnameescape(systemlist('git rev-parse --show-toplevel')[0])
+command! Cdroot lua local bufdir = vim.fn.expand('%:p:h'); local cmd = bufdir ~= '' and ('git -C ' .. vim.fn.shellescape(bufdir) .. ' rev-parse --show-toplevel') or 'git rev-parse --show-toplevel'; local result = vim.fn.systemlist(cmd); if vim.v.shell_error == 0 and result[1] and result[1] ~= '' then vim.cmd('cd ' .. vim.fn.fnameescape(result[1])) else vim.notify('Not in a git repository', vim.log.levels.ERROR) end
 " Cd to cargo root
-command! Cdcargoroot execute 'cd' fnameescape(fnamemodify(trim(system('cargo locate-project --message-format plain')), ':h'))
-command! Cdcargoroot lua local root=vim.fs.dirname(vim.fs.find('Cargo.toml',{path=vim.api.nvim_buf_get_name(0),upward=true})[1]); if root then vim.cmd('lcd '..vim.fn.fnameescape(root)) end
+command! Cdcargoroot lua local root=vim.fs.dirname(vim.fs.find('Cargo.toml',{path=vim.api.nvim_buf_get_name(0),upward=true})[1]); if root then vim.cmd('lcd '..vim.fn.fnameescape(root)) else vim.notify('Not in a cargo project', vim.log.levels.ERROR) end
 
 " Open last buffer with space space
 nnoremap <Leader><Leader> :b#<CR>
@@ -422,7 +412,7 @@ nmap <Leader>gh :GBrowse<CR>
 " This shows what you are typing as a command.
 set showcmd
 
-set shell=/opt/homebrew/bin/fish
+set shell=/usr/bin/fish
 
 " Needed for Syntax Highlighting and stuff
 filetype on " turn on file type detection
@@ -531,7 +521,7 @@ command! -range=% HexRust <line1>,<line2>s/\v<([0-9A-Fa-f]{2})>/0x\1/g
 nnoremap <C-g> :call NERDTreeToggleAndRefresh()<CR>
 
 " Refresh file list every time its opened
-function NERDTreeToggleAndRefresh()
+function! NERDTreeToggleAndRefresh()
   :NERDTreeToggle
   if g:NERDTree.IsOpen()
     :NERDTreeRefreshRoot

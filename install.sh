@@ -33,6 +33,9 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 mkdir -p ~/.config/nvim
 ln -sf ~/.vimrc ~/.config/nvim/init.vim
 
+mkdir -p ~/.vim
+ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.vim/ftplugin
+
 nvim --headless +PlugInstall +qa
 
 #### Tmux

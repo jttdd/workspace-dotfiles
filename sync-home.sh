@@ -36,3 +36,8 @@ echo "Updated git aliases in $GITCONFIG_EXT"
 mkdir -p "$SCRIPT_DIR/.claude"
 cp -L ~/.claude/CLAUDE.md "$SCRIPT_DIR/.claude/"
 echo "Copied ~/.claude/CLAUDE.md"
+
+# Copy ~/.vim/ftplugin
+mkdir -p "$SCRIPT_DIR/.vim"
+cp -rL ~/.vim/ftplugin "$SCRIPT_DIR/.vim/"
+echo "Copied ~/.vim/ftplugin"
