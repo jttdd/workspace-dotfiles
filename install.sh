@@ -5,8 +5,8 @@ set -exuo pipefail
 sudo add-apt-repository -y ppa:neovim-ppa/unstable && sudo apt update
 
 sudo apt install -y neovim \
-  mosh \
   ripgrep \
+  protobuf-compiler libprotobuf-dev zlib1g-dev libssl-dev \
   libevent-dev ncurses-dev ncurses-dev build-essential bison pkg-config # tmux dev dependencies
 
 # Symlink dotfiles to the root within your workspace
@@ -47,6 +47,22 @@ make && sudo make install
 cd ..
 rm -rf tmux-3.5a.tar.gz tmux-3.5a
 
+#### Mosh 1.4.0 (for OSC52 clipboard support)
+# Temporarily use system protoc to avoid version mismatch
+mv ~/.local/bin/protoc ~/.local/bin/protoc.backup 2>/dev/null || true
+curl -L https://github.com/mobile-shell/mosh/releases/download/mosh-1.4.0/mosh-1.4.0.tar.gz -o mosh-1.4.0.tar.gz
+tar xzf mosh-1.4.0.tar.gz
+cd mosh-1.4.0
+./configure --prefix=/usr/local
+make -j$(nproc)
+sudo make install
+cd ..
+rm -rf mosh-1.4.0.tar.gz mosh-1.4.0
+mv ~/.local/bin/protoc.backup ~/.local/bin/protoc 2>/dev/null || true
+
+# Start mosh server
+mosh-server
+
 #### Fish Shell (already installed)
 
 # https://github.com/sharkdp/fd
@@ -86,6 +102,8 @@ ln -sf ~/.fish/config.fish ~/.config/fish/config.fish
 #### Claude
 mkdir -p ~/.claude
 ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.claude/CLAUDE.md
+mkdir -p ~/.codex
+ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.codex/AGENTS.md
 
 #### Git
 git config --global include.path "~/.gitconfig-ext"
@@ -98,8 +116,5 @@ rustup component add rust-analyzer
 # Install lspmux
 source "$HOME/.cargo/env"
 cargo install lspmux
-
-# Start mosh server, it will detach itself
-mosh-server
 
 echo "Success"
