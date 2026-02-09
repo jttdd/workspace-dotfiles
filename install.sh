@@ -80,6 +80,10 @@ fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/fun
 mkdir -p ~/.config/fish
 ln -sf ~/.fish/config.fish ~/.config/fish/config.fish
 
+#### Claude
+mkdir -p ~/.claude
+ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.claude/CLAUDE.md
+
 #### Git
 git config --global include.path "~/.gitconfig-ext"
 
@@ -87,6 +91,10 @@ git config --global include.path "~/.gitconfig-ext"
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 rustup component add rust-analyzer
+
+# Install lspmux
+source "$HOME/.cargo/env"
+cargo install lspmux
 
 # Start mosh server, it will detach itself
 mosh-server

@@ -9,6 +9,12 @@ set -gx EDITOR nvim
 
 fish_add_path ~/.local/bin
 
+# Start lspmux server if not already running
+if not pgrep -f "lspmux server" > /dev/null
+    nohup ~/.cargo/bin/lspmux server > ~/.lspmux.log 2>&1 &
+    disown
+end
+
 # Vi mode
 fish_vi_key_bindings
 
