@@ -7,8 +7,6 @@ end
 
 set -gx EDITOR nvim
 
-fish_add_path ~/.local/bin
-
 # Start lspmux server if not already running
 if not pgrep -f "lspmux server" > /dev/null
     nohup ~/.cargo/bin/lspmux server > ~/.lspmux.log 2>&1 &
@@ -21,6 +19,9 @@ fish_vi_key_bindings
 source ~/.aliases/common.fish
 source ~/.aliases/ddog.fish
 source ~/.aliases/ddog-libstreaming.fish
+
+# Ensure ~/.local/bin is at the front of PATH (after aliases that may modify PATH)
+fish_add_path --prepend --move ~/.local/bin
 
 # source "$HOME/.cargo/env.fish"
 
