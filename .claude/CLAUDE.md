@@ -22,6 +22,10 @@
 # Ralph Loop
 - When completing a ralph loop style plan, always output `<promise>COMPLETE</promise>` when done.
 
+# Code style
+
+- Comments: don't explain the "what" when the code is reasonably clear. Prefer extracting a descriptive helper function over adding a comment. Always explain "why".
+
 # Formating
 - Always run the appropriate code formatting command after you've made changes
 
@@ -31,10 +35,12 @@
     * `cargo clippy --all-targets`
     * `cargo test -- --skip=integration_test` # or run the specific set of tests scoped to the change
 - Avoid silencing clippy lints with #[allow()]. Fix the underlying issue.
-- When finished, format with `cargo fmt`
+- When finished, format with `cargo fmt` - IMPORTANT: Only format files in the crate you're working on by specifying paths explicitly: `cargo fmt -- path/to/file.rs` OR run from the specific crate directory to avoid formatting unrelated workspace crates
 - Can measure coverage with:
     * `cargo +nightly llvm-cov --branch -- --skip=integration_test`
 - When commiting, always ignore ./cargo/config.toml and Cargo.lock changes (unless Cargo.toml also changes)
+- Before work can be considered finished, all #[allow(dead_code)] must be removed
+- Whenever a dependency is added to Cargo.toml, run: `bzl run //third_party:crates_vendor` to update the bzl files
 
 # Git
 - Start the commit messages with the project name, e.g.:
@@ -44,7 +50,4 @@
 
 # Github
 - Use the `gh` CLI to interact with github
-
-# Atlassian
-- Use `acli` when interacting with atlassian products (JIRA, confluence, etc)
-
+- Always open PRs as draft using the `--draft` flag with `gh pr create`

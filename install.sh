@@ -5,6 +5,7 @@ set -exuo pipefail
 sudo add-apt-repository -y ppa:neovim-ppa/unstable && sudo apt update
 
 sudo apt install -y neovim \
+  htop \
   ripgrep \
   protobuf-compiler libprotobuf-dev zlib1g-dev libssl-dev \
   libevent-dev ncurses-dev ncurses-dev build-essential bison pkg-config # tmux dev dependencies
@@ -32,6 +33,7 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 
 mkdir -p ~/.config/nvim
 ln -sf ~/.vimrc ~/.config/nvim/init.vim
+ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.config/nvim/ftplugin
 
 mkdir -p ~/.vim
 ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.vim/ftplugin
@@ -116,5 +118,16 @@ rustup component add rust-analyzer
 # Install lspmux
 source "$HOME/.cargo/env"
 cargo install lspmux
+
+#### Cleanup DATADOG_ROOT
+if [ -n "${DATADOG_ROOT:-}" ]; then
+  echo "Cleaning up unused directories in $DATADOG_ROOT"
+  rm -rf "$DATADOG_ROOT/corp-hugo" \
+         "$DATADOG_ROOT/documentation" \
+         "$DATADOG_ROOT/dogweb" \
+         "$DATADOG_ROOT/web-ui" \
+         "$DATADOG_ROOT/consul-config" \
+         "$DATADOG_ROOT/logs-backend"
+fi
 
 echo "Success"

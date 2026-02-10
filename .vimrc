@@ -43,6 +43,8 @@ Plug 'preservim/nerdtree'
 " Markdown
 Plug 'img-paste-devs/img-paste.vim'
 
+" OSC52 clipboard support for remote/tmux
+Plug 'ojroques/vim-oscyank'
 
 call plug#end()
 
@@ -89,8 +91,8 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', '<space>a', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
   buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
   buf_set_keymap('n', '<space>e', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
-  buf_set_keymap('n', '<C-p>', '<cmd>lua vim.diagnostic.goto_prev()<CR>', opts)
-  buf_set_keymap('n', '<C-n>', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
+  buf_set_keymap('n', '<C-p>', '<cmd>lua vim.diagnostic.jump({count = -1})<CR>', opts)
+  buf_set_keymap('n', '<C-n>', '<cmd>lua vim.diagnostic.jump({count = 1})<CR>', opts)
   buf_set_keymap('n', '<space>q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
   -- buf_set_keymap("n", "<space>f", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
   buf_set_keymap('n', '<space>h', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
@@ -120,6 +122,8 @@ local function copy_path_range(start_line, end_line)
   end
 
   local result = string.format("@%s#L%d-%d", rel, start_line, end_line)
+
+  -- Copy to system clipboard (OSC52 handled by clipboard provider)
   vim.fn.setreg("+", result)
   vim.notify(string.format("Copied: %s", result), vim.log.levels.INFO)
 end
@@ -279,8 +283,8 @@ set ffs=unix
 hi MatchParen cterm=none ctermbg=red ctermfg=white
 
 " make pop up menu easier to read
-hi Pmenu ctermbg=white
-hi PmenuSel guibg=green guifg=white
+hi Pmenu ctermbg=black ctermfg=white guibg=#2C2C2C guifg=#FFFFFF
+hi PmenuSel ctermbg=blue ctermfg=white guibg=#005FFF guifg=#FFFFFF
 
 
 " show whitespace
@@ -306,13 +310,8 @@ nmap <Leader>P "+P
 vmap <Leader>p "+p
 vmap <Leader>P "+P
 
-" Since I use linux, I want this
-let g:clipbrdDefaultReg = '+'
-
-" Set clipbroard to system clipboard
-" set clipboard=unnamedplus
-" For mac:
-set clipboard=unnamed
+" Use system clipboard
+set clipboard=unnamedplus
 
 " toggle between show whitepace
 " nmap <Leader>l :set list!<CR>
@@ -330,11 +329,10 @@ function! s:rg_streaming()
   if empty(l:root)
     let l:root = getcwd()
   endif
-  let l:dir = fnamemodify(l:root . '/domains/streaming', ':p')
   call fzf#vim#grep(
-        \ 'rg --column --line-number --no-heading --color=always --smart-case -- ""',
+        \ 'rg --column --line-number --no-heading --color=always --smart-case -- "" domains/streaming libs/rust/observability',
         \ 1,
-        \ fzf#vim#with_preview({'dir': l:dir, 'options': ['--prompt', 'streaming> ']}),
+        \ fzf#vim#with_preview({'dir': l:root, 'options': ['--prompt', 'streaming+obs> ']}),
         \ 0)
 endfunction
 
@@ -345,11 +343,12 @@ function! s:files_streaming()
   if empty(l:root)
     let l:root = getcwd()
   endif
-  let l:dir = fnamemodify(l:root . '/domains/streaming', ':p')
-  call fzf#vim#files(
-        \ l:dir,
-        \ fzf#vim#with_preview({'options': ['--prompt', 'streaming files> ']}),
-        \ 0)
+  let l:source_cmd = 'rg --files --hidden --glob "!.git" domains/streaming libs/rust/observability'
+  call fzf#run(fzf#wrap({
+        \ 'source': l:source_cmd,
+        \ 'dir': l:root,
+        \ 'options': ['--prompt', 'streaming+obs files> ', '--preview', 'bat --color=always --style=numbers --line-range=:500 {}']
+        \ }))
 endfunction
 
 " Keybinding: <leader>fs
@@ -437,9 +436,16 @@ autocmd BufWritePre * %s/\s\+$//e
 " Automatically save file on :make
 set autowrite
 
-" Automatically read file with updates, trigger when buffer in focus
+" Automatically read file with updates
 set autoread
-au FocusGained,BufEnter * :checktime
+" More aggressive auto-reload for external file changes (e.g., from agents)
+augroup AutoReload
+  autocmd!
+  autocmd FocusGained,BufEnter,CursorHold,CursorHoldI,WinEnter * :silent! checktime
+  autocmd FileChangedShellPost * echohl WarningMsg | echo "File changed on disk. Buffer reloaded." | echohl None
+augroup END
+" Check for file changes every 500ms when idle (more responsive for agent edits)
+set updatetime=500
 
 " Cool tab completion stuff
 set wildmenu
