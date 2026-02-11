@@ -130,4 +130,7 @@ if [ -n "${DATADOG_ROOT:-}" ]; then
          "$DATADOG_ROOT/logs-backend"
 fi
 
+#### Update Datadog Tools
+update-tool dd-gopls
+
 echo "Success"
