@@ -2,6 +2,25 @@
 
 set -exuo pipefail
 
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64)
+    PROTOC_ARCH="x86_64"
+    DEB_ARCH="amd64"
+    FZF_ARCH="amd64"
+    ;;
+  aarch64|arm64)
+    PROTOC_ARCH="aarch_64"
+    DEB_ARCH="arm64"
+    FZF_ARCH="arm64"
+    ;;
+  *)
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+    ;;
+esac
+
 sudo add-apt-repository -y ppa:neovim-ppa/unstable && sudo apt update
 
 sudo apt install -y neovim \
@@ -22,8 +41,8 @@ done
 
 #### protoc
 PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-x86_64.zip
-unzip protoc-30.2-linux-x86_64.zip -d $HOME/.local
+curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-${PROTOC_ARCH}.zip
+unzip protoc-30.2-linux-${PROTOC_ARCH}.zip -d $HOME/.local
 
 
 #### Neovim
@@ -68,21 +87,21 @@ mosh-server
 #### Fish Shell (already installed)
 
 # https://github.com/sharkdp/fd
-curl -L https://github.com/sharkdp/fd/releases/download/v10.2.0/fd_10.2.0_amd64.deb > fd_10.2.0_amd64.deb
-sudo dpkg -i fd_10.2.0_amd64.deb
+curl -L https://github.com/sharkdp/fd/releases/download/v10.2.0/fd_10.2.0_${DEB_ARCH}.deb > fd_10.2.0_${DEB_ARCH}.deb
+sudo dpkg -i fd_10.2.0_${DEB_ARCH}.deb
 ln -sf $(which fdfind) ~/.local/bin/fd
-rm -f fd_10.2.0_amd64.deb
+rm -f fd_10.2.0_${DEB_ARCH}.deb
 
 # https://github.com/sharkdp/bat
-curl -L https://github.com/sharkdp/bat/releases/download/v0.25.0/bat_0.25.0_amd64.deb > bat_0.25.0_amd64.deb
-sudo dpkg -i bat_0.25.0_amd64.deb
-rm -f bat_0.25.0_amd64.deb
+curl -L https://github.com/sharkdp/bat/releases/download/v0.25.0/bat_0.25.0_${DEB_ARCH}.deb > bat_0.25.0_${DEB_ARCH}.deb
+sudo dpkg -i bat_0.25.0_${DEB_ARCH}.deb
+rm -f bat_0.25.0_${DEB_ARCH}.deb
 
 # https://github.com/junegunn/fzf
-curl -L https://github.com/junegunn/fzf/releases/download/v0.61.3/fzf-0.61.3-linux_amd64.tar.gz > fzf-0.61.3-linux_amd64.tar.gz
-tar -xvzf fzf-0.61.3-linux_amd64.tar.gz
+curl -L https://github.com/junegunn/fzf/releases/download/v0.61.3/fzf-0.61.3-linux_${FZF_ARCH}.tar.gz > fzf-0.61.3-linux_${FZF_ARCH}.tar.gz
+tar -xvzf fzf-0.61.3-linux_${FZF_ARCH}.tar.gz
 mv fzf ~/.local/bin/fzf
-rm -f fzf-0.61.3-linux_amd64.tar.gz
+rm -f fzf-0.61.3-linux_${FZF_ARCH}.tar.gz
 
 #### SSH key doesn't seem to be valid at this point and the workspace gitconfig overrides to use SSH. Temporarily override HOME it so we can clone public git repos
 #### Base-16
@@ -113,11 +132,14 @@ git config --global include.path "~/.gitconfig-ext"
 #### Rust
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
+
 rustup component add rust-analyzer
 
-# Install lspmux
-source "$HOME/.cargo/env"
+# Install lspmux and start server in background
 cargo install lspmux
+lspmux server &
+disown
 
 #### Cleanup DATADOG_ROOT
 if [ -n "${DATADOG_ROOT:-}" ]; then

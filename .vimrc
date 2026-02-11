@@ -135,7 +135,7 @@ vim.api.nvim_create_user_command("CopyPathRange", function(opts)
 end, { range = true, desc = "Copy file path with line range" })
 
 
-vim.keymap.set("v", "<C-l>", [[:<C-U>CopyPathRange<CR>]], { desc = "Copy file path with line range" })
+vim.keymap.set("v", "<C-l>", [[:CopyPathRange<CR>]], { desc = "Copy file path with line range" })
 
 local root_dir = vim.fn.getcwd()
 
