@@ -1,16 +1,8 @@
 " Plugins using vim-plug
 call plug#begin()
 
-" languages support
-" lsp (nvim 0.11+ has built-in lsp config, no need for nvim-lspconfig)
-Plug 'nvim-lua/lsp_extensions.nvim'
-Plug 'hrsh7th/cmp-nvim-lsp', { 'branch': 'main' }
-Plug 'hrsh7th/cmp-buffer', { 'branch': 'main' }
-Plug 'hrsh7th/cmp-path', { 'branch': 'main' }
-Plug 'hrsh7th/cmp-cmdline', { 'branch': 'main' }
-Plug 'hrsh7th/nvim-cmp', { 'branch': 'main' }
-Plug 'hrsh7th/vim-vsnip'
-Plug 'hrsh7th/vim-vsnip-integ'
+" completion (blink.cmp)
+Plug 'Saghen/blink.cmp', { 'tag': 'v1.*' }
 Plug 'ray-x/lsp_signature.nvim'
 
 "rust
@@ -61,7 +53,38 @@ set statusline+=%F\ %#StatuslineGitBranch#%{FugitiveHead()}%*
 
 lua << END
 vim.lsp.log_level = vim.log.levels.ERROR
-local cmp = require'cmp'
+
+require('blink.cmp').setup({
+  keymap = {
+    preset = 'none',
+    ['<Tab>'] = { 'show', 'select_next', 'fallback' },
+    ['<S-Tab>'] = { 'select_prev', 'fallback' },
+    ['<CR>'] = { 'accept', 'fallback' },
+    ['<C-Space>'] = { 'show', 'fallback' },
+    ['<C-e>'] = { 'hide', 'fallback' },
+    ['<C-b>'] = { 'scroll_documentation_up', 'fallback' },
+    ['<C-f>'] = { 'scroll_documentation_down', 'fallback' },
+  },
+  sources = {
+    default = { 'lsp', 'path', 'buffer' },
+  },
+  completion = {
+    documentation = { auto_show = true },
+    list = {
+      selection = {
+        preselect = false,
+        auto_insert = true,
+      },
+    },
+  },
+  fuzzy = { implementation = "prefer_rust_with_warning" },
+})
+
+-- Set blink.cmp capabilities for all LSP servers
+vim.lsp.config("*", {
+  capabilities = require("blink.cmp").get_lsp_capabilities({}, true),
+})
+
 local on_attach = function(client, bufnr)
 
    -- Get signatures (and _only_ signatures) when in argument lists.
@@ -185,7 +208,6 @@ vim.lsp.config.gopls = {
     filetypes = { 'go', 'gomod', 'gowork', 'gotmpl' },
     root_markers = { 'go.work', 'go.mod', '.git' },
     on_attach = on_attach,
-    capabilities = require('cmp_nvim_lsp').default_capabilities(),
     settings = {
       gopls = {
         directoryFilters = {
@@ -219,51 +241,8 @@ vim.diagnostic.config({
   severity_sort = true,
 })
 
-cmp.setup({
-    snippet = {
-      -- REQUIRED - you must specify a snippet engine
-      expand = function(args)
-        vim.fn["vsnip#anonymous"](args.body) -- For `vsnip` users.
-        -- require('luasnip').lsp_expand(args.body) -- For `luasnip` users.
-        -- require('snippy').expand_snippet(args.body) -- For `snippy` users.
-        -- vim.fn["UltiSnips#Anon"](args.body) -- For `ultisnips` users.
-      end,
-    },
-    window = {
-      -- completion = cmp.config.window.bordered(),
-      -- documentation = cmp.config.window.bordered(),
-    },
-    mapping = cmp.mapping.preset.insert({
-      ['<C-b>'] = cmp.mapping.scroll_docs(-4),
-      ['<C-f>'] = cmp.mapping.scroll_docs(4),
-      ['<C-Space>'] = cmp.mapping.complete(),
-      ['<C-e>'] = cmp.mapping.abort(),
-      ['<CR>'] = cmp.mapping.confirm({ select = true }), -- Accept currently selected item. Set `select` to `false` to only confirm explicitly selected items.
-      ['<Tab>'] = cmp.mapping.select_next_item({ behavior = cmp.SelectBehavior.Insert }),
-      ['<S-Tab>'] = cmp.mapping.select_prev_item({ behavior = cmp.SelectBehavior.Insert }),
-    }),
-    sources = cmp.config.sources({
-      { name = 'nvim_lsp' },
-      { name = 'vsnip' }, -- For vsnip users.
-      -- { name = 'luasnip' }, -- For luasnip users.
-      -- { name = 'ultisnips' }, -- For ultisnips users.
-      -- { name = 'snippy' }, -- For snippy users.
-    }, {
-      { name = 'buffer' },
-    })
-  })
 END
 
-" https://github.com/nvim-lua/completion-nvim#configuration
-" Use <Tab> and <S-Tab> to navigate through popup menu
-inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
-inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-" Set completeopt to have a better completion experience
-set completeopt=menuone,noinsert,noselect
-" Avoid showing message extra message when using completion
-set shortmess+=c
-" imap <tab> <Plug>(completion_smart_tab)
-" imap <s-tab> <Plug>(completion_smart_s_tab)
 
 " fast switching between normal/insert modes
 set timeoutlen=1000 ttimeoutlen=0
