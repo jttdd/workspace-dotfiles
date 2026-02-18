@@ -5,29 +5,26 @@ set -exuo pipefail
 # Detect architecture
 ARCH=$(uname -m)
 case "$ARCH" in
-  x86_64)
-    PROTOC_ARCH="x86_64"
-    DEB_ARCH="amd64"
-    FZF_ARCH="amd64"
-    ;;
-  aarch64|arm64)
-    PROTOC_ARCH="aarch_64"
-    DEB_ARCH="arm64"
-    FZF_ARCH="arm64"
-    ;;
-  *)
-    echo "Unsupported architecture: $ARCH"
-    exit 1
-    ;;
+  x86_64)    DEB_ARCH="amd64";  PROTOC_ARCH="x86_64"  ;;
+  aarch64)   DEB_ARCH="arm64";  PROTOC_ARCH="aarch_64" ;;
+  *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-sudo add-apt-repository -y ppa:neovim-ppa/unstable && sudo apt update
-
-sudo apt install -y neovim \
+sudo apt update
+sudo apt install -y \
   htop \
   ripgrep \
   protobuf-compiler libprotobuf-dev zlib1g-dev libssl-dev \
   libevent-dev ncurses-dev ncurses-dev build-essential bison pkg-config # tmux dev dependencies
+
+#### Neovim (from GitHub release)
+NVIM_VERSION="v0.11.6"
+curl -L "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/nvim-linux-${ARCH/aarch64/arm64}.tar.gz" -o nvim-linux-${ARCH/aarch64/arm64}.tar.gz
+tar xzf nvim-linux-${ARCH/aarch64/arm64}.tar.gz
+sudo rm -rf /opt/nvim
+sudo mv nvim-linux-${ARCH/aarch64/arm64} /opt/nvim
+sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
+rm -f nvim-linux-${ARCH/aarch64/arm64}.tar.gz
 
 # Symlink dotfiles to the root within your workspace
 DOTFILES_PATH="$HOME/dotfiles"
@@ -98,10 +95,10 @@ sudo dpkg -i bat_0.25.0_${DEB_ARCH}.deb
 rm -f bat_0.25.0_${DEB_ARCH}.deb
 
 # https://github.com/junegunn/fzf
-curl -L https://github.com/junegunn/fzf/releases/download/v0.61.3/fzf-0.61.3-linux_${FZF_ARCH}.tar.gz > fzf-0.61.3-linux_${FZF_ARCH}.tar.gz
-tar -xvzf fzf-0.61.3-linux_${FZF_ARCH}.tar.gz
+curl -L https://github.com/junegunn/fzf/releases/download/v0.61.3/fzf-0.61.3-linux_${DEB_ARCH}.tar.gz > fzf-0.61.3-linux_${DEB_ARCH}.tar.gz
+tar -xvzf fzf-0.61.3-linux_${DEB_ARCH}.tar.gz
 mv fzf ~/.local/bin/fzf
-rm -f fzf-0.61.3-linux_${FZF_ARCH}.tar.gz
+rm -f fzf-0.61.3-linux_${DEB_ARCH}.tar.gz
 
 #### SSH key doesn't seem to be valid at this point and the workspace gitconfig overrides to use SSH. Temporarily override HOME it so we can clone public git repos
 #### Base-16

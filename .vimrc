@@ -59,6 +59,8 @@ require('blink.cmp').setup({
     preset = 'none',
     ['<Tab>'] = { 'show', 'select_next', 'fallback' },
     ['<S-Tab>'] = { 'select_prev', 'fallback' },
+    ['<Down>'] = { 'select_next', 'fallback' },
+    ['<Up>'] = { 'select_prev', 'fallback' },
     ['<CR>'] = { 'accept', 'fallback' },
     ['<C-Space>'] = { 'show', 'fallback' },
     ['<C-e>'] = { 'hide', 'fallback' },
