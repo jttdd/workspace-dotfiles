@@ -6,6 +6,7 @@ if status --is-interactive
 end
 
 set -gx EDITOR nvim
+set -g fish_prompt_pwd_dir_length 0
 
 # Start lspmux server if not already running
 if not pgrep -f "lspmux server" > /dev/null
