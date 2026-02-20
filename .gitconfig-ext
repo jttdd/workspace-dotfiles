@@ -5,12 +5,12 @@
 
   # branch
 	bb = !~/code/rcfiles/scripts/better-git-branch.sh
-	bl = !~/dotfiles/scripts/git-branch-list.sh
+	bl = !~/code/rcfiles/scripts/git-branch-list.sh
 	branch-clean = !~/code/rcfiles/scripts/git-branch-clean.py
 
   create-branch = "!f() { branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\"; else git branch \"$branch\" HEAD && git branch --edit-description \"$branch\"; fi; }; f"
 
-  stack-branch = "!bash -c 'f() { current=$(git branch --show-current); if [[ $current =~ -p([0-9]+)$ ]]; then new_number=$((${BASH_REMATCH[1]} + 1)); new_branch=${current%-p*}-p$new_number; else new_branch=\"$current-p1\"; fi; git checkout -b $new_branch; git branch --edit-description; }; f' -"
+  stack-branch = "!f() { current=$(git branch --show-current); if [[ $current =~ -p([0-9]+)$ ]]; then new_number=$((${BASH_REMATCH[1]} + 1)); new_branch=${current%-p*}-p$new_number; else new_branch=\"$current-p1\"; fi; git checkout -b $new_branch; git branch --edit-description; }; f"
 
   new-branch = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default && branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\" && git checkout \"$branch\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\" && git checkout \"$branch\"; else git branch \"$branch\" origin/$default && git branch --edit-description \"$branch\" && git checkout \"$branch\"; fi; }; f"
 
@@ -34,6 +34,10 @@
   # log
   l = log
   ll = log --oneline
+  between = "!f() { git log --oneline $1..$2; }; f" # usage: git between <older> <newer>
+
+  # browse
+  browse = "!f() { url=$(git remote get-url origin | sed 's/git@github.com:/https:\\/\\/github.com\\//' | sed 's/\\.git$//'); open \"$url/commit/$1\"; }; f"
 
   focus = "!$DATADOG_ROOT/experimental/teams/language-tools/bin/git-focus"
 
