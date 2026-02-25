@@ -117,6 +117,9 @@ fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/fun
 mkdir -p ~/.config/fish
 ln -sf ~/.fish/config.fish ~/.config/fish/config.fish
 
+mkdir -p ~/.local/share/fish
+ln -sf "$DOTFILES_PATH/fish_history" ~/.local/share/fish/fish_history
+
 #### Claude
 mkdir -p ~/.claude
 ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.claude/CLAUDE.md
@@ -125,6 +128,8 @@ ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.codex/AGENTS.md
 
 #### Git
 git config --global include.path "~/.gitconfig-ext"
+git config --global merge.tool nvimdiff
+git config --global mergetool.keepBackup false
 
 #### Rust
 

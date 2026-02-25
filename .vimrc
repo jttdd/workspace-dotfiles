@@ -172,10 +172,17 @@ vim.lsp.config.rust_analyzer = {
   on_attach = on_attach,
   settings = {
     ["rust-analyzer"] = {
-      check = { command = "clippy" },
+      check = {
+        command = "check",
+        workspace = false,
+      },
+      checkOnSave = true,
+      rustfmt = {
+        extraArgs = { "--edition", "2024" },
+      },
       cargo = {
-        allFeatures = true,
         targetDir = true,
+        cfgs = { "test" },
       },
       files = {
         excludeDirs = {
