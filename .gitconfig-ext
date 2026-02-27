@@ -4,9 +4,9 @@
   aa = "!f() { git add -A; git status; }; f"
 
   # branch
-	bb = !~/code/rcfiles/scripts/better-git-branch.sh
-	bl = !~/code/rcfiles/scripts/git-branch-list.sh
-	branch-clean = !~/code/rcfiles/scripts/git-branch-clean.py
+	bb = !~/dotfiles/scripts/better-git-branch.sh
+	bl = !~/dotfiles/scripts/git-branch-list.sh
+	branch-clean = !~/dotfiles/scripts/git-branch-clean.py
 
   create-branch = "!f() { branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\"; else git branch \"$branch\" HEAD && git branch --edit-description \"$branch\"; fi; }; f"
 
