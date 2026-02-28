@@ -320,7 +320,7 @@ function! s:rg_streaming()
   call fzf#vim#grep(
         \ 'rg --column --line-number --no-heading --color=always --smart-case -- "" domains/streaming libs/rust/observability',
         \ 1,
-        \ fzf#vim#with_preview({'dir': l:root, 'options': ['--prompt', 'streaming+obs> ']}),
+        \ fzf#vim#with_preview({'dir': l:root, 'options': ['--prompt', 'streaming> ']}),
         \ 0)
 endfunction
 
@@ -335,7 +335,7 @@ function! s:files_streaming()
   call fzf#run(fzf#wrap({
         \ 'source': l:source_cmd,
         \ 'dir': l:root,
-        \ 'options': ['--prompt', 'streaming+obs files> ', '--preview', 'bat --color=always --style=numbers --line-range=:500 {}']
+        \ 'options': ['--prompt', 'streaming files> ', '--preview', 'bat --color=always --style=numbers --line-range=:500 {}']
         \ }))
 endfunction
 
