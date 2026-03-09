@@ -10,7 +10,7 @@
 
   create-branch = "!f() { branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\"; else git branch \"$branch\" HEAD && git branch --edit-description \"$branch\"; fi; }; f"
 
-  stack-branch = "!f() { current=$(git branch --show-current); if [[ $current =~ -p([0-9]+)$ ]]; then new_number=$((${BASH_REMATCH[1]} + 1)); new_branch=${current%-p*}-p$new_number; else new_branch=\"$current-p1\"; fi; git checkout -b $new_branch; git branch --edit-description; }; f"
+  stack-branch = "!f() { current=$(git branch --show-current); if echo \"$current\" | rg -q -- '-p[0-9]+$'; then prefix=$(echo \"$current\" | sed -E 's/-p[0-9]+$//'); number=$(echo \"$current\" | sed -E 's/.*-p([0-9]+)$/\\1/'); new_branch=\"$prefix-p$((number + 1))\"; else new_branch=\"$current-p1\"; fi; git checkout -b \"$new_branch\"; git branch --edit-description; }; f"
 
   new-branch = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default && branch=jeff.lai/$1; if git show-ref --verify --quiet \"refs/heads/$branch\"; then echo \"Branch $branch already exists\" && git checkout \"$branch\"; elif git show-ref --verify --quiet \"refs/remotes/origin/$branch\"; then git branch \"$branch\" \"origin/$branch\" && git checkout \"$branch\"; else git branch \"$branch\" origin/$default && git branch --edit-description \"$branch\" && git checkout \"$branch\"; fi; }; f"
 
@@ -34,10 +34,10 @@
   # log
   l = log
   ll = log --oneline
-  between = "!f() { git log --oneline $1..$2; }; f" # usage: git between <older> <newer>
+  between = "!f() { older=$1; newer=$2; shift 2; if [ $# -gt 0 ]; then git log --oneline \"$older..$newer\" -- \"$@\"; else git log --oneline \"$older..$newer\"; fi; }; f" # usage: git between <older> <newer> [path...]
 
   # browse
-  browse = "!f() { url=$(git remote get-url origin | sed 's/git@github.com:/https:\\/\\/github.com\\//' | sed 's/\\.git$//'); open \"$url/commit/$1\"; }; f"
+  browse = "!f() { url=$(git remote get-url origin | sed 's/git@github.com:/https:\\/\\/github.com\\//' | sed 's/\\.git$//'); target=\"$url/commit/$1\"; echo \"$target\"; if command -v open >/dev/null 2>&1 && [ -z \"$SSH_CONNECTION\" ]; then open \"$target\"; fi; }; f"
 
   focus = "!$DATADOG_ROOT/experimental/teams/language-tools/bin/git-focus"
 

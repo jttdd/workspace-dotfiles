@@ -50,9 +50,11 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 mkdir -p ~/.config/nvim
 ln -sf ~/.vimrc ~/.config/nvim/init.vim
 ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.config/nvim/ftplugin
+ln -sf "$DOTFILES_PATH/.vim/after" ~/.config/nvim/after
 
 mkdir -p ~/.vim
 ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.vim/ftplugin
+ln -sf "$DOTFILES_PATH/.vim/after" ~/.vim/after
 
 nvim --headless +PlugInstall +qa
 
@@ -128,6 +130,8 @@ ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.codex/AGENTS.md
 
 #### Git
 git config --global include.path "~/.gitconfig-ext"
+git config --global feature.manyFiles true
+git config --global index.threads true
 git config --global merge.tool nvimdiff
 git config --global mergetool.keepBackup false
 

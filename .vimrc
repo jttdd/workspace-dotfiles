@@ -3,6 +3,7 @@ call plug#begin()
 
 " completion (blink.cmp)
 Plug 'Saghen/blink.cmp', { 'tag': 'v1.*' }
+Plug 'neovim/nvim-lspconfig'
 Plug 'ray-x/lsp_signature.nvim'
 
 "rust
@@ -61,7 +62,7 @@ require('blink.cmp').setup({
     ['<S-Tab>'] = { 'select_prev', 'fallback' },
     ['<Down>'] = { 'select_next', 'fallback' },
     ['<Up>'] = { 'select_prev', 'fallback' },
-    ['<CR>'] = { 'accept', 'fallback' },
+    ['<CR>'] = { 'select_and_accept', 'fallback' },
     ['<C-Space>'] = { 'show', 'fallback' },
     ['<C-e>'] = { 'hide', 'fallback' },
     ['<C-b>'] = { 'scroll_documentation_up', 'fallback' },
@@ -165,39 +166,40 @@ vim.keymap.set("v", "<C-l>", [[:CopyPathRange<CR>]], { desc = "Copy file path wi
 local root_dir = vim.fn.getcwd()
 
 -- Configure rust_analyzer using new vim.lsp.config API
-vim.lsp.config.rust_analyzer = {
+vim.lsp.config('rust_analyzer', {
   cmd = { 'lspmux' },
   filetypes = { 'rust' },
-  root_markers = { 'Cargo.toml' },
+  root_markers = {
+    'rust-project.json',
+    'WORKSPACE.bazel',
+    'WORKSPACE',
+    '.git',
+    'Cargo.toml',
+  },
   on_attach = on_attach,
   settings = {
     ["rust-analyzer"] = {
       check = {
-        command = "check",
-        workspace = false,
-      },
-      checkOnSave = true,
-      rustfmt = {
-        extraArgs = { "--edition", "2024" },
+        command = "clippy",
       },
       cargo = {
         targetDir = true,
         cfgs = { "test" },
       },
-      files = {
-        excludeDirs = {
-          "node_modules",
-          "vendor",
-          "bazel-*",
-          "bazel-bin",
-          "bazel-out",
-          "bazel-testlogs",
-          ".git",
-        },
-      },
+      -- files = {
+      --   excludeDirs = {
+      --     "node_modules",
+      --     "vendor",
+      --     "bazel-*",
+      --     "bazel-bin",
+      --     "bazel-out",
+      --     "bazel-testlogs",
+      --     ".git",
+      --   },
+      -- },
     }
   }
-}
+})
 
 -- Enable rust_analyzer
 vim.lsp.enable('rust_analyzer')
@@ -206,7 +208,7 @@ vim.lsp.enable('rust_analyzer')
 local include_path = root_dir .. "/include"
 
 -- Configure gopls using new vim.lsp.config API
-vim.lsp.config.gopls = {
+vim.lsp.config('gopls', {
     cmd = { "dd-gopls" },
     cmd_env = {
       CGO_ENABLED = "1",
@@ -236,7 +238,7 @@ vim.lsp.config.gopls = {
         staticcheck = false,
       },
     }
-  }
+  })
 
 -- Enable gopls
 vim.lsp.enable('gopls')
@@ -268,7 +270,10 @@ autocmd BufReadPost *.rs setlocal filetype=rust
 set ffs=unix
 
 " make highlight matching brackets easier to read
-hi MatchParen cterm=none ctermbg=red ctermfg=white
+hi MatchParen cterm=none ctermbg=LightRed ctermfg=black guibg=#FFB3B3 guifg=#000000
+
+" make visual selection background light orange
+hi Visual cterm=none ctermbg=223 ctermfg=black guibg=#FFD8A8 guifg=#000000
 
 " make pop up menu easier to read
 hi Pmenu ctermbg=black ctermfg=white guibg=#2C2C2C guifg=#FFFFFF
@@ -318,7 +323,7 @@ function! s:rg_streaming()
     let l:root = getcwd()
   endif
   call fzf#vim#grep(
-        \ 'rg --column --line-number --no-heading --color=always --smart-case -- "" domains/streaming libs/rust/observability',
+        \ 'rg --column --line-number --no-heading --color=always --smart-case -- "" domains/streaming libs/rust/observability domains/kafka',
         \ 1,
         \ fzf#vim#with_preview({'dir': l:root, 'options': ['--prompt', 'streaming> ']}),
         \ 0)
@@ -331,7 +336,7 @@ function! s:files_streaming()
   if empty(l:root)
     let l:root = getcwd()
   endif
-  let l:source_cmd = 'rg --files --hidden --glob "!.git" domains/streaming libs/rust/observability'
+  let l:source_cmd = 'rg --files --hidden --glob "!.git" domains/streaming libs/rust/observability domains/kafka'
   call fzf#run(fzf#wrap({
         \ 'source': l:source_cmd,
         \ 'dir': l:root,
@@ -349,7 +354,7 @@ command! -nargs=0 FZFCD call fzf#run({
   \ 'options': '--prompt "cd> "'
   \ })
 
-nnoremap <leader>c :FZFCD<CR>
+nnoremap <leader>c :Cdcargoroot<CR>
 
 " Cd to git root
 command! Cdroot lua local bufdir = vim.fn.expand('%:p:h'); local cmd = bufdir ~= '' and ('git -C ' .. vim.fn.shellescape(bufdir) .. ' rev-parse --show-toplevel') or 'git rev-parse --show-toplevel'; local result = vim.fn.systemlist(cmd); if vim.v.shell_error == 0 and result[1] and result[1] ~= '' then vim.cmd('cd ' .. vim.fn.fnameescape(result[1])) else vim.notify('Not in a git repository', vim.log.levels.ERROR) end
