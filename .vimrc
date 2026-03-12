@@ -10,6 +10,8 @@ Plug 'ray-x/lsp_signature.nvim'
 Plug 'rust-lang/rust.vim'
 " go
 Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries', 'for': 'go' }
+" java
+Plug 'mfussenegger/nvim-jdtls'
 
 " color schemes
 Plug 'chriskempson/base16-vim'
@@ -252,6 +254,58 @@ vim.diagnostic.config({
   severity_sort = true,
 })
 
+local function java_root_dir(bufname)
+  local path = bufname ~= "" and bufname or vim.api.nvim_buf_get_name(0)
+  return vim.fs.root(path, {
+    "WORKSPACE.bazel",
+    "WORKSPACE",
+    "settings.gradle.kts",
+    "settings.gradle",
+    "build.gradle.kts",
+    "build.gradle",
+    "pom.xml",
+    ".git",
+  })
+end
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "java",
+  callback = function(args)
+    local ok, jdtls = pcall(require, "jdtls")
+    if not ok then
+      vim.notify("nvim-jdtls is not installed", vim.log.levels.WARN)
+      return
+    end
+
+    local root = java_root_dir(vim.api.nvim_buf_get_name(args.buf))
+    if not root then
+      vim.notify("jdtls: could not detect project root", vim.log.levels.WARN)
+      return
+    end
+
+    local project_name = vim.fs.basename(root)
+    local workspace_dir = vim.fn.stdpath("cache") .. "/jdtls-workspace/" .. project_name
+
+    jdtls.start_or_attach({
+      cmd = { "jdtls", "-data", workspace_dir },
+      root_dir = root,
+      on_attach = on_attach,
+      settings = {
+        java = {
+          eclipse = { downloadSources = true },
+          maven = { downloadSources = true },
+          referencesCodeLens = { enabled = true },
+          implementationsCodeLens = { enabled = true },
+        },
+      },
+      init_options = {
+        bundles = {},
+      },
+    })
+  end,
+})
+
+
 END
 
 
@@ -322,35 +376,129 @@ function! s:files_git_root()
   execute 'Files ' . fnameescape(l:root)
 endfunction
 
+function! s:add_repo_candidates(candidates, repo, anchor) abort
+  " Derive sibling repo paths from an anchor repo/worktree path.
+  if empty(a:anchor)
+    return
+  endif
+  let l:repo_name = fnamemodify(a:anchor, ':t')
+  let l:parent = fnamemodify(a:anchor, ':h')
+  let l:suffix = matchstr(l:repo_name, '-\d\+$')
+
+  if l:repo_name =~# '^' . a:repo . '\%(-\d\+\)\?$'
+    call add(a:candidates, a:anchor)
+  endif
+  if !empty(l:suffix)
+    call add(a:candidates, l:parent . '/' . a:repo . l:suffix)
+  endif
+  call add(a:candidates, l:parent . '/' . a:repo)
+endfunction
+
+function! s:repo_anchor(path) abort
+  " Find the nearest dd-source/logs-backend repo folder in a path chain.
+  let l:dir = a:path
+  while l:dir !=# '/' && !empty(l:dir)
+    let l:base = fnamemodify(l:dir, ':t')
+    if l:base =~# '^\%(dd-source\|logs-backend\)\%(-\d\+\)\?$'
+      return l:dir
+    endif
+    let l:next = fnamemodify(l:dir, ':h')
+    if l:next ==# l:dir
+      break
+    endif
+    let l:dir = l:next
+  endwhile
+  return ''
+endfunction
+
+function! s:repo_root(repo) abort
+  " Resolve preferred repo root across dd worktrees and canonical clones.
+  let l:candidates = []
+  let l:cwd_anchor = <SID>repo_anchor(getcwd())
+
+  " Prefer /dd checkouts first so local worktrees win over symlinked canonical paths.
+  let l:cwd_tail = matchstr(getcwd(), '\v(dd-source|logs-backend)(-\d+)?$')
+  let l:cwd_suffix = matchstr(l:cwd_tail, '-\d\+$')
+  if !empty(l:cwd_suffix)
+    call add(l:candidates, expand('~/dd/' . a:repo . l:cwd_suffix))
+  endif
+  call add(l:candidates, expand('~/dd/' . a:repo))
+
+  let l:git_root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
+  let l:git_suffix = matchstr(fnamemodify(l:git_root, ':t'), '-\d\+$')
+  if !empty(l:git_suffix)
+    call add(l:candidates, expand('~/dd/' . a:repo . l:git_suffix))
+  endif
+  " Then try sibling repos relative to cwd/git anchors, plus global fallbacks.
+  call <SID>add_repo_candidates(l:candidates, a:repo, l:cwd_anchor)
+  call <SID>add_repo_candidates(l:candidates, a:repo, l:git_root)
+
+  if exists('$DATADOG_ROOT') && !empty($DATADOG_ROOT)
+    call add(l:candidates, $DATADOG_ROOT . '/' . a:repo)
+  endif
+  call add(l:candidates, expand('~/go/src/github.com/DataDog/' . a:repo))
+
+  let l:seen = {}
+  for l:path in l:candidates
+    if empty(l:path) || has_key(l:seen, l:path)
+      continue
+    endif
+    let l:seen[l:path] = 1
+    if isdirectory(l:path)
+      return l:path
+    endif
+  endfor
+
+  if !empty(l:git_root)
+    return l:git_root
+  endif
+  return getcwd()
+endfunction
+
+function! s:streaming_search_spec() abort
+  let l:anchor = <SID>repo_anchor(getcwd())
+  let l:repo_name = empty(l:anchor) ? '' : fnamemodify(l:anchor, ':t')
+
+  if l:repo_name =~# '^logs-backend\%(-\d\+\)\?$'
+    return {
+          \ 'root': <SID>repo_root('logs-backend'),
+          \ 'paths': 'domains/streaming/apps/streaming-assigner domains/streaming/libs/streaming-assigner domains/streaming/libs/streaming-assigner-commons domains/streaming/libs/streaming-assigner-grpc-client',
+          \ 'prompt': 'assigner> ',
+          \ 'files_prompt': 'assigner files> ',
+          \ }
+  endif
+
+  return {
+        \ 'root': <SID>repo_root('dd-source'),
+        \ 'paths': 'domains/streaming libs/rust/observability domains/kafka',
+        \ 'prompt': 'streaming> ',
+        \ 'files_prompt': 'streaming files> ',
+        \ }
+endfunction
+
 nnoremap <leader>r :call <SID>files_git_root()<CR>
 
 " Global file content search
 nnoremap <C-f> :Rg<CR>
 
 function! s:rg_streaming()
-  let l:root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
-  if empty(l:root)
-    let l:root = getcwd()
-  endif
+  let l:spec = <SID>streaming_search_spec()
   call fzf#vim#grep(
-        \ 'rg --column --line-number --no-heading --color=always --smart-case -- "" domains/streaming libs/rust/observability domains/kafka',
+        \ 'rg --column --line-number --no-heading --color=always --smart-case -- "" ' . l:spec.paths,
         \ 1,
-        \ fzf#vim#with_preview({'dir': l:root, 'options': ['--prompt', 'streaming> ']}),
+        \ fzf#vim#with_preview({'dir': l:spec.root, 'options': ['--prompt', l:spec.prompt]}),
         \ 0)
 endfunction
 
 nnoremap <leader>f :call <SID>rg_streaming()<CR>
 
 function! s:files_streaming()
-  let l:root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
-  if empty(l:root)
-    let l:root = getcwd()
-  endif
-  let l:source_cmd = 'rg --files --hidden --glob "!.git" domains/streaming libs/rust/observability domains/kafka'
+  let l:spec = <SID>streaming_search_spec()
+  let l:source_cmd = 'rg --files --hidden --glob "!.git" ' . l:spec.paths
   call fzf#run(fzf#wrap({
         \ 'source': l:source_cmd,
-        \ 'dir': l:root,
-        \ 'options': ['--prompt', 'streaming files> ', '--preview', 'bat --color=always --style=numbers --line-range=:500 {}']
+        \ 'dir': l:spec.root,
+        \ 'options': ['--prompt', l:spec.files_prompt, '--preview', 'bat --color=always --style=numbers --line-range=:500 {}']
         \ }))
 endfunction
 
