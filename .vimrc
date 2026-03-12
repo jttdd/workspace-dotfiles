@@ -314,6 +314,16 @@ let $FZF_DEFAULT_COMMAND = 'rg --files --hidden --glob "!.git"'
 nnoremap <Leader>n :FZF<CR>
 nnoremap <Leader>m :Files `git rev-parse --show-toplevel`<CR>
 
+function! s:files_git_root()
+  let l:root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
+  if empty(l:root)
+    let l:root = getcwd()
+  endif
+  execute 'Files ' . fnameescape(l:root)
+endfunction
+
+nnoremap <leader>r :call <SID>files_git_root()<CR>
+
 " Global file content search
 nnoremap <C-f> :Rg<CR>
 
@@ -354,12 +364,13 @@ command! -nargs=0 FZFCD call fzf#run({
   \ 'options': '--prompt "cd> "'
   \ })
 
-nnoremap <leader>c :Cdcargoroot<CR>
+nnoremap <leader>c :Cdbazelroot<CR>
 
 " Cd to git root
 command! Cdroot lua local bufdir = vim.fn.expand('%:p:h'); local cmd = bufdir ~= '' and ('git -C ' .. vim.fn.shellescape(bufdir) .. ' rev-parse --show-toplevel') or 'git rev-parse --show-toplevel'; local result = vim.fn.systemlist(cmd); if vim.v.shell_error == 0 and result[1] and result[1] ~= '' then vim.cmd('cd ' .. vim.fn.fnameescape(result[1])) else vim.notify('Not in a git repository', vim.log.levels.ERROR) end
 " Cd to cargo root
 command! Cdcargoroot lua local root=vim.fs.dirname(vim.fs.find('Cargo.toml',{path=vim.api.nvim_buf_get_name(0),upward=true})[1]); if root then vim.cmd('lcd '..vim.fn.fnameescape(root)) else vim.notify('Not in a cargo project', vim.log.levels.ERROR) end
+command! Cdbazelroot lua local buf=vim.api.nvim_buf_get_name(0); local path=buf ~= '' and vim.fn.fnamemodify(buf,':p:h') or vim.fn.getcwd(); local builds=vim.fs.find('BUILD.bazel',{path=path,upward=true,limit=16}); if #builds == 0 then vim.notify('No BUILD.bazel found upward from current buffer', vim.log.levels.ERROR); return end; local idx=(#builds >= 2) and 2 or 1; local root=vim.fs.dirname(builds[idx]); vim.cmd('lcd '..vim.fn.fnameescape(root))
 
 " Open last buffer with space space
 nnoremap <Leader><Leader> :b#<CR>
@@ -400,6 +411,8 @@ nnoremap <leader>d i<C-R>=strftime("## %Y-%m-%d %H:%M")<CR><CR><esc>
 
 " Open current file in github
 nmap <Leader>gh :GBrowse<CR>
+nnoremap <Leader>b :GBrowse!<CR>
+xnoremap <Leader>b :GBrowse!<CR>
 
 " This shows what you are typing as a command.
 set showcmd

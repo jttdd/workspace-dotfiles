@@ -12,3 +12,4 @@ hi CursorLine   cterm=NONE ctermbg=darkblue ctermfg=white guibg=darkred guifg=wh
 
 " Helps reading docs
 nnoremap <Leader>l :set cursorline!<CR>
+nnoremap <buffer> <leader>c :Cdcargoroot<CR>
