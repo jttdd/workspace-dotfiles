@@ -67,6 +67,14 @@ make && sudo make install
 cd ..
 rm -rf tmux-3.5a.tar.gz tmux-3.5a
 
+mkdir -p ~/.tmux/plugins
+if [ ! -d ~/.tmux/plugins/tpm ]; then
+  HOME=/foo git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+else
+  HOME=/foo git -C ~/.tmux/plugins/tpm pull --ff-only
+fi
+~/.tmux/plugins/tpm/bin/install_plugins
+
 #### Mosh 1.4.0 (for OSC52 clipboard support)
 # Temporarily use system protoc to avoid version mismatch
 mv ~/.local/bin/protoc ~/.local/bin/protoc.backup 2>/dev/null || true

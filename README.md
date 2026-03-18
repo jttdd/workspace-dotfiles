@@ -13,6 +13,13 @@ After workspace is created, SSH in, open neovim and run:
 :PlugInstall
 ```
 
+Tmux restores can then be managed with:
+
+```bash
+prefix + Ctrl-s    # save
+prefix + Ctrl-r    # restore
+```
+
 # Workspace Tunnel (autossh)
 To keep a local tunnel to workspace port `10350` running in the background
 while still having a usable forwarded SSH agent on the remote side, use:
