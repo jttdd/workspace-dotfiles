@@ -47,6 +47,7 @@
     - When working in libstreaming, start all commit messages with: `libstreaming: `
     - When working in assigner_client, start all commit messages with: `assigner_client: `
     - When working across multiple projects in the domain/streaming, start all commit messages with: `streaming: `
+- Commit messages must explain why the change is being made, not just what changed.
 
 # Github
 - Use the `gh` CLI to interact with github
