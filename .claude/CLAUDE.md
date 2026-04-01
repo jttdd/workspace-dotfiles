@@ -5,7 +5,7 @@
 # Commands
 - use `rg` instead of `grep`, don't ask for my confirmation
 - use `fd` instead of `find`, don't ask for my confirmation
-- ast-grep (`sg`) is available. Whenever a search requires syntax-aware or structural matching, default to `sg --lang rust -p '<pattern>'` (or set `--lang` appropriately)
+- `ast-grep` is available. Whenever a search requires syntax-aware or structural matching, default to `ast-grep --lang rust -p '<pattern>'` (or set `--lang` appropriately)
 - Always use `bzl` to run bazel instead of `bazel`
 - For any read command, execute without my permission
 - For any build/check command, execute without my permission
@@ -18,9 +18,6 @@
 - You can use more than one sub-agent at a time.
 - When using sub-agents, always try to leverage as many as possible - parallelize sub-agents for improved efficiency.
 - Always use sub-agents when you can. Break you work up into discrete chunks for agents to execute.
-
-# Ralph Loop
-- When completing a ralph loop style plan, always output `<promise>COMPLETE</promise>` when done.
 
 # Code style
 

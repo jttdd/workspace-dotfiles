@@ -17,6 +17,10 @@ sudo apt install -y \
   protobuf-compiler libprotobuf-dev zlib1g-dev libssl-dev \
   libevent-dev ncurses-dev ncurses-dev build-essential bison pkg-config # tmux dev dependencies
 
+#### Homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
 #### Neovim (from GitHub release)
 NVIM_VERSION="v0.11.6"
 curl -L "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/nvim-linux-${ARCH/aarch64/arm64}.tar.gz" -o nvim-linux-${ARCH/aarch64/arm64}.tar.gz
@@ -126,6 +130,10 @@ fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/fun
 
 mkdir -p ~/.config/fish
 ln -sf ~/.fish/config.fish ~/.config/fish/config.fish
+if ! rg -qxF 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv fish)"' ~/.config/fish/config.fish; then
+  echo >> ~/.config/fish/config.fish
+  echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv fish)"' >> ~/.config/fish/config.fish
+fi
 
 mkdir -p ~/.local/share/fish
 ln -sf "$DOTFILES_PATH/fish_history" ~/.local/share/fish/fish_history
@@ -135,6 +143,8 @@ mkdir -p ~/.claude
 ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.claude/CLAUDE.md
 mkdir -p ~/.codex
 ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.codex/AGENTS.md
+mkdir -p ~/.agents
+ln -sfn "$DOTFILES_PATH/.agents/skills" ~/.agents/skills
 
 #### Git
 git config --global include.path "~/.gitconfig-ext"
@@ -167,6 +177,7 @@ if [ -n "${DATADOG_ROOT:-}" ]; then
 fi
 
 #### Update Datadog Tools
+update-tool dd-auth
 update-tool dd-gopls
 
 echo "Success"

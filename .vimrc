@@ -359,24 +359,30 @@ function! s:repo_anchor(path) abort
   return ''
 endfunction
 
+function! s:repo_suffix(path) abort
+  " Prefer the anchored repo name so numbered worktrees still resolve from subdirs.
+  let l:anchor = <SID>repo_anchor(a:path)
+  let l:name = empty(l:anchor) ? fnamemodify(a:path, ':t') : fnamemodify(l:anchor, ':t')
+  return matchstr(l:name, '-\d\+$')
+endfunction
+
 function! s:repo_root(repo) abort
   " Resolve preferred repo root across dd worktrees and canonical clones.
   let l:candidates = []
   let l:cwd_anchor = <SID>repo_anchor(getcwd())
 
   " Prefer /dd checkouts first so local worktrees win over symlinked canonical paths.
-  let l:cwd_tail = matchstr(getcwd(), '\v(dd-source|logs-backend)(-\d+)?$')
-  let l:cwd_suffix = matchstr(l:cwd_tail, '-\d\+$')
+  let l:cwd_suffix = <SID>repo_suffix(getcwd())
   if !empty(l:cwd_suffix)
     call add(l:candidates, expand('~/dd/' . a:repo . l:cwd_suffix))
   endif
-  call add(l:candidates, expand('~/dd/' . a:repo))
 
   let l:git_root = trim(system('git rev-parse --show-toplevel 2>/dev/null'))
-  let l:git_suffix = matchstr(fnamemodify(l:git_root, ':t'), '-\d\+$')
+  let l:git_suffix = <SID>repo_suffix(l:git_root)
   if !empty(l:git_suffix)
     call add(l:candidates, expand('~/dd/' . a:repo . l:git_suffix))
   endif
+  call add(l:candidates, expand('~/dd/' . a:repo))
   " Then try sibling repos relative to cwd/git anchors, plus global fallbacks.
   call <SID>add_repo_candidates(l:candidates, a:repo, l:cwd_anchor)
   call <SID>add_repo_candidates(l:candidates, a:repo, l:git_root)
@@ -411,15 +417,15 @@ function! s:streaming_search_spec() abort
     return {
           \ 'root': <SID>repo_root('logs-backend'),
           \ 'paths': 'domains/streaming/apps/streaming-assigner domains/streaming/libs/streaming-assigner domains/streaming/libs/streaming-assigner-commons domains/streaming/libs/streaming-assigner-grpc-client',
-          \ 'prompt': 'assigner> ',
-          \ 'files_prompt': 'assigner files> ',
+          \ 'prompt': 'streaming contents> ',
+          \ 'files_prompt': 'streaming files> ',
           \ }
   endif
 
   return {
         \ 'root': <SID>repo_root('dd-source'),
         \ 'paths': 'domains/streaming libs/rust/observability domains/kafka',
-        \ 'prompt': 'streaming> ',
+        \ 'prompt': 'streaming contents> ',
         \ 'files_prompt': 'streaming files> ',
         \ }
 endfunction
