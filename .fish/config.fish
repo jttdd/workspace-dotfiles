@@ -36,6 +36,6 @@ bind -M insert \cd true
 
 # fzf
 
-fzf_configure_bindings  --directory=\ct
+fzf_configure_bindings --history=\cr --directory=\ct
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv fish)"
