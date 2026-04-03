@@ -2,6 +2,9 @@
 
 set -exuo pipefail
 
+export NONINTERACTIVE=1
+export DEBIAN_FRONTEND=noninteractive
+
 # Detect architecture
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -43,7 +46,7 @@ done
 #### protoc
 PB_REL="https://github.com/protocolbuffers/protobuf/releases"
 curl -LO $PB_REL/download/v30.2/protoc-30.2-linux-${PROTOC_ARCH}.zip
-unzip protoc-30.2-linux-${PROTOC_ARCH}.zip -d $HOME/.local
+unzip -o protoc-30.2-linux-${PROTOC_ARCH}.zip -d $HOME/.local
 
 
 #### Neovim
@@ -53,12 +56,12 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 
 mkdir -p ~/.config/nvim
 ln -sf ~/.vimrc ~/.config/nvim/init.vim
-ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.config/nvim/ftplugin
-ln -sf "$DOTFILES_PATH/.vim/after" ~/.config/nvim/after
+ln -sfn "$DOTFILES_PATH/.vim/ftplugin" ~/.config/nvim/ftplugin
+ln -sfn "$DOTFILES_PATH/.vim/after" ~/.config/nvim/after
 
 mkdir -p ~/.vim
-ln -sf "$DOTFILES_PATH/.vim/ftplugin" ~/.vim/ftplugin
-ln -sf "$DOTFILES_PATH/.vim/after" ~/.vim/after
+ln -sfn "$DOTFILES_PATH/.vim/ftplugin" ~/.vim/ftplugin
+ln -sfn "$DOTFILES_PATH/.vim/after" ~/.vim/after
 
 nvim --headless +PlugInstall +qa
 
@@ -77,6 +80,7 @@ if [ ! -d ~/.tmux/plugins/tpm ]; then
 else
   HOME=/foo git -C ~/.tmux/plugins/tpm pull --ff-only
 fi
+tmux start-server \; set-environment -g TMUX_PLUGIN_MANAGER_PATH "$HOME/.tmux/plugins/"
 ~/.tmux/plugins/tpm/bin/install_plugins
 
 #### Mosh 1.4.0 (for OSC52 clipboard support)
@@ -177,6 +181,7 @@ if [ -n "${DATADOG_ROOT:-}" ]; then
 fi
 
 #### Update Datadog Tools
+export PATH="$HOME/.local/bin:$PATH"
 update-tool dd-auth
 update-tool dd-gopls
 
