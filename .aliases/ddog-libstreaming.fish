@@ -25,4 +25,4 @@ function cdukcl; cd (_dd_worktree)/domains/kafka/libs/rust/client; end
 function cdukclgo; cd (_dd_worktree)/domains/kafka/libs/go/client; end
 
 # streaming-kafka-client
-function cdstreamkc; cd (_dd_worktree)/domains/streaming/libs/rust/streaming_kafka_client; end
+function cdskc; cd (_dd_worktree)/domains/streaming/libs/rust/streaming_kafka_client; end

@@ -21,9 +21,6 @@ source ~/.aliases/common.fish
 source ~/.aliases/ddog.fish
 source ~/.aliases/ddog-libstreaming.fish
 
-# Ensure ~/.local/bin is at the front of PATH (after aliases that may modify PATH)
-fish_add_path --prepend --move ~/.local/bin
-
 # source "$HOME/.cargo/env.fish"
 
 # plugins
@@ -39,3 +36,6 @@ bind -M insert \cd true
 fzf_configure_bindings --history=\cr --directory=\ct
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv fish)"
+
+# Ensure ~/.local/bin is at the front of PATH (after aliases that may modify PATH)
+fish_add_path --prepend --move ~/.local/bin

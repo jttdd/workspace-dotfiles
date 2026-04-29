@@ -47,15 +47,79 @@ call plug#end()
 set shell=/bin/bash
 
 " https://github.com/chriskempson/base16-vim
-let base16colorspace=256
-colorscheme base16-ashes
+set termguicolors
+colorscheme base16-material-darker
+
+" Give blink docs a softer pastel surface without changing the main theme.
+function! DotfilesApplyBlinkHighlights() abort
+  highlight BlinkCmpDoc guifg=#d8dee9 guibg=#2b303b ctermfg=253 ctermbg=236
+  highlight BlinkCmpDocBorder guifg=#a3be8c guibg=#2b303b ctermfg=151 ctermbg=236
+  highlight BlinkCmpDocSeparator guifg=#8fbcbb guibg=#2b303b ctermfg=109 ctermbg=236
+  highlight BlinkCmpKind guifg=#b48ead ctermfg=139
+  highlight BlinkCmpKindFunction guifg=#88c0d0 ctermfg=110
+  highlight BlinkCmpKindMethod guifg=#81a1c1 ctermfg=109
+  highlight BlinkCmpKindClass guifg=#a3be8c ctermfg=151
+  highlight BlinkCmpKindInterface guifg=#8fbcbb ctermfg=109
+  highlight BlinkCmpLabelDetail guifg=#ebcb8b ctermfg=223
+  highlight BlinkCmpLabelDescription guifg=#d8dee9 ctermfg=253
+endfunction
+
+augroup dotfiles_blink_highlights
+  autocmd!
+  autocmd ColorScheme * call DotfilesApplyBlinkHighlights()
+augroup END
+
+call DotfilesApplyBlinkHighlights()
 
 highlight StatuslineGitBranch guifg=LightGreen
 " full file path on status line
 set statusline+=%F\ %#StatuslineGitBranch#%{FugitiveHead()}%*
+set statusline+=%{luaeval('_G.dotfiles_lsp_statusline()')}
 
 lua << END
 vim.lsp.log_level = vim.log.levels.ERROR
+local lspconfig_util = require("lspconfig.util")
+
+local lsp_statusline = ""
+
+function _G.dotfiles_lsp_statusline()
+  if lsp_statusline == "" then
+    return ""
+  end
+  return " " .. lsp_statusline
+end
+
+local default_progress_handler = vim.lsp.handlers["$/progress"]
+
+vim.lsp.handlers["$/progress"] = function(err, result, ctx, config)
+  if default_progress_handler then
+    default_progress_handler(err, result, ctx, config)
+  end
+
+  local value = result and result.value
+  if type(value) ~= "table" then
+    return
+  end
+
+  local parts = {}
+  if type(value.title) == "string" and value.title ~= "" then
+    table.insert(parts, value.title)
+  end
+  if type(value.message) == "string" and value.message ~= "" then
+    table.insert(parts, value.message)
+  end
+  if type(value.percentage) == "number" then
+    table.insert(parts, string.format("%d%%", value.percentage))
+  end
+
+  if value.kind == "end" then
+    lsp_statusline = ""
+  else
+    lsp_statusline = table.concat(parts, " ")
+  end
+
+  vim.cmd("redrawstatus")
+end
 
 require('blink.cmp').setup({
   keymap = {
@@ -74,11 +138,15 @@ require('blink.cmp').setup({
     default = { 'lsp', 'path', 'buffer' },
   },
   completion = {
-    documentation = { auto_show = true },
+    documentation = {
+      auto_show = true,
+      treesitter_highlighting = false,
+      window = { border = 'rounded' },
+    },
     list = {
       selection = {
-        preselect = false,
-        auto_insert = true,
+        preselect = true,
+        auto_insert = false,
       },
     },
   },
@@ -169,17 +237,19 @@ vim.keymap.set("v", "<C-l>", [[:CopyPathRange<CR>]], { desc = "Copy file path wi
 
 local root_dir = vim.fn.getcwd()
 
+local function rust_root_dir(bufnr, on_dir)
+  local fname = vim.api.nvim_buf_get_name(bufnr)
+  local root = lspconfig_util.root_pattern("rust-project.json")(fname)
+    or lspconfig_util.find_git_ancestor(fname)
+    or lspconfig_util.root_pattern("Cargo.toml")(fname)
+  on_dir(root)
+end
+
 -- Configure rust_analyzer using new vim.lsp.config API
 vim.lsp.config('rust_analyzer', {
-  cmd = { 'lspmux' },
+  cmd = { 'lspmux', 'client', '--server-path', 'rust-analyzer' },
   filetypes = { 'rust' },
-  root_markers = {
-    'rust-project.json',
-    'WORKSPACE.bazel',
-    'WORKSPACE',
-    '.git',
-    'Cargo.toml',
-  },
+  root_dir = rust_root_dir,
   on_attach = on_attach,
   settings = {
     ["rust-analyzer"] = {
@@ -526,6 +596,10 @@ filetype on " turn on file type detection
 filetype plugin on
 syntax enable
 syntax on
+set foldmethod=indent
+set foldlevelstart=99
+set foldnestmax=10
+nnoremap - za
 
 " search visual selection with //
 vnoremap // y/\V<C-R>=escape(@",'/\')<CR><CR>
@@ -636,7 +710,7 @@ nnoremap <C-g> :call NERDTreeToggleAndRefresh()<CR>
 
 " Refresh file list every time its opened
 function! NERDTreeToggleAndRefresh()
-  :NERDTreeToggle
+  execute 'NERDTreeToggle' fnameescape(getcwd())
   if g:NERDTree.IsOpen()
     :NERDTreeRefreshRoot
   endif
@@ -646,8 +720,8 @@ endfunction
 nnoremap <leader>g :NERDTreeFind<CR>
 let NERDTreeShowHidden=1
 
-" Sort purely alphabetically, no dir/file grouping
-let g:NERDTreeSortOrder = ['\/$', '*']
+" Sort purely alphabetically, with files and directories interleaved by name
+let g:NERDTreeSortOrder = []
 
 " File explorer tree list view
 let g:netrw_liststyle = 3

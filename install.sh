@@ -145,6 +145,7 @@ ln -sf "$DOTFILES_PATH/fish_history" ~/.local/share/fish/fish_history
 #### Claude
 mkdir -p ~/.claude
 ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.claude/CLAUDE.md
+ln -sfn "$DOTFILES_PATH/.agents/skills" ~/.claude/skills
 mkdir -p ~/.codex
 ln -sf "$DOTFILES_PATH/.claude/CLAUDE.md" ~/.codex/AGENTS.md
 mkdir -p ~/.agents

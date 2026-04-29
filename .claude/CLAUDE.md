@@ -22,6 +22,10 @@
 # Code style
 
 - Comments: don't explain the "what" when the code is reasonably clear. Prefer extracting a descriptive helper function over adding a comment. Always explain "why".
+- Rust doc comments attach to the following item, so place them before attributes/macros like `#[tokio::test]` or `#[derive(...)]`, not after.
+- Order matters for readability (even if it doesn't affect semantics). On the first read, a file is read top-down, so put important things near the top. The main function goes first.
+    - If a nested type is complex, make it a top-level struct.
+    - At the same time, not everything has a single right order. When in doubt, consider sorting alphabetically, taking advantage of big-endian naming.
 
 # Formating
 - Always run the appropriate code formatting command after you've made changes
@@ -49,3 +53,6 @@
 # Github
 - Use the `gh` CLI to interact with github
 - Always open PRs as draft using the `--draft` flag with `gh pr create`
+
+# Planning
+- When asked to output a plan / tracking document, always put it in agent-plans/ directory which is at the root of the git repo. If it doesn't exist create it
