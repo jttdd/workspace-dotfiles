@@ -1,0 +1,3 @@
+[submodule ".agents/skills/excalidraw-diagram"]
+	path = .agents/skills/excalidraw-diagram
+	url = https://github.com/coleam00/excalidraw-diagram-skill
