@@ -49,7 +49,7 @@
 
   # rebase
   rebase-remote = "!git fetch origin $(git rev-parse --abbrev-ref HEAD) && git rebase @{u}"
-  rebase-latest = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default:$default && git rebase $default; }; f"
+  rebase-latest = "!f() { default=$(git rev-parse --abbrev-ref origin/HEAD | cut -c8-) && git fetch origin $default && git rebase origin/$default; }; f"
 
   wip = "!git commit -m 'WIP' --no-verify"
   awip = "!git add -A && git wip"

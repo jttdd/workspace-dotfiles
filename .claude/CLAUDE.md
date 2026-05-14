@@ -21,8 +21,11 @@
 
 # Code style
 
-- Comments: don't explain the "what" when the code is reasonably clear. Prefer extracting a descriptive helper function over adding a comment. Always explain "why".
-- Rust doc comments attach to the following item, so place them before attributes/macros like `#[tokio::test]` or `#[derive(...)]`, not after.
+- Comments
+    - don't explain the "what" when the code is reasonably clear. Prefer extracting a descriptive helper function over adding a comment. Always explain "why".
+    - Rust doc comments attach to the following item, so place them before attributes/macros like `#[tokio::test]` or `#[derive(...)]`, not after.
+    - Always add documentation to public items
+    - Don't remove existing unrelated comments
 - Order matters for readability (even if it doesn't affect semantics). On the first read, a file is read top-down, so put important things near the top. The main function goes first.
     - If a nested type is complex, make it a top-level struct.
     - At the same time, not everything has a single right order. When in doubt, consider sorting alphabetically, taking advantage of big-endian naming.
@@ -42,6 +45,14 @@
 - When commiting, always ignore ./cargo/config.toml and Cargo.lock changes (unless Cargo.toml also changes)
 - Before work can be considered finished, all #[allow(dead_code)] must be removed
 - Whenever a dependency is added to Cargo.toml, run: `bzl run //third_party:crates_vendor` to update the bzl files
+- bon
+    - prefer using `bon::Builder` for data-only types, especially public ones
+    - prefer deriving `Builder` directly on the target struct when the generated `build()` is sufficient
+    - prefer using #[bon] macro with #[builder] on `new` when building is non-trivial
+    - use struct builder syntax rather than function-builder patterns
+    - for field validation/transforms, prefer `#[builder(with = ...)]` on the field instead of custom whole-builder plumbing when possible
+    - when a field must be non-empty, prefer enforcing that in the field-level `#[builder(with = ...)]` closure
+    - only introduce a separate params/builder struct when you need a custom top-level `build()` path that the default generated builder cannot express cleanly
 
 # Git
 - Start the commit messages with the project name, e.g.:

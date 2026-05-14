@@ -1,6 +1,9 @@
 " Plugins using vim-plug
 call plug#begin()
 
+" Git
+Plug 'sindrets/diffview.nvim'
+
 " completion (blink.cmp)
 Plug 'Saghen/blink.cmp', { 'tag': 'v1.*' }
 Plug 'neovim/nvim-lspconfig'
@@ -48,7 +51,13 @@ set shell=/bin/bash
 
 " https://github.com/chriskempson/base16-vim
 set termguicolors
-colorscheme base16-material-darker
+colorscheme base16-ashes
+
+function! DotfilesApplyThemeHighlights() abort
+  " Base16 Ashes makes comments too close to the background for long editing sessions.
+  highlight Comment guifg=#a7adba ctermfg=145
+  highlight SpecialComment guifg=#b7beca ctermfg=146
+endfunction
 
 " Give blink docs a softer pastel surface without changing the main theme.
 function! DotfilesApplyBlinkHighlights() abort
@@ -66,9 +75,11 @@ endfunction
 
 augroup dotfiles_blink_highlights
   autocmd!
+  autocmd ColorScheme * call DotfilesApplyThemeHighlights()
   autocmd ColorScheme * call DotfilesApplyBlinkHighlights()
 augroup END
 
+call DotfilesApplyThemeHighlights()
 call DotfilesApplyBlinkHighlights()
 
 highlight StatuslineGitBranch guifg=LightGreen
@@ -366,6 +377,7 @@ let mapleader = "\<Space>"
 
 " Save with ctrl + s
 nnoremap <C-s> :w<CR>
+nnoremap <Leader>v :vsplit<CR>
 
 " copy/paste to system clipboard with leader
 vmap <Leader>y "+y
@@ -374,6 +386,8 @@ nmap <Leader>p "+p
 nmap <Leader>P "+P
 vmap <Leader>p "+p
 vmap <Leader>P "+P
+
+nnoremap <Leader>d :DiffviewOpen<CR>
 
 " Use system clipboard
 set clipboard=unnamedplus
@@ -536,13 +550,36 @@ command! -nargs=0 FZFCD call fzf#run({
   \ 'options': '--prompt "cd> "'
   \ })
 
+lua << END
+function _G.dotfiles_current_buffer_bazel_root()
+  local path = vim.fn.expand('%:p:h')
+  if path == '' then
+    path = vim.fn.getcwd()
+  end
+
+  while path and path ~= '' do
+    if vim.uv.fs_stat(path .. '/BUILD.bazel') or vim.uv.fs_stat(path .. '/BUILD') then
+      return path
+    end
+
+    local parent = vim.fs.dirname(path)
+    if not parent or parent == path then
+      break
+    end
+    path = parent
+  end
+
+  return nil
+end
+END
+
 nnoremap <leader>c :Cdbazelroot<CR>
 
 " Cd to git root
 command! Cdroot lua local bufdir = vim.fn.expand('%:p:h'); local cmd = bufdir ~= '' and ('git -C ' .. vim.fn.shellescape(bufdir) .. ' rev-parse --show-toplevel') or 'git rev-parse --show-toplevel'; local result = vim.fn.systemlist(cmd); if vim.v.shell_error == 0 and result[1] and result[1] ~= '' then vim.cmd('cd ' .. vim.fn.fnameescape(result[1])) else vim.notify('Not in a git repository', vim.log.levels.ERROR) end
 " Cd to cargo root
 command! Cdcargoroot lua local root=vim.fs.dirname(vim.fs.find('Cargo.toml',{path=vim.api.nvim_buf_get_name(0),upward=true})[1]); if root then vim.cmd('lcd '..vim.fn.fnameescape(root)) else vim.notify('Not in a cargo project', vim.log.levels.ERROR) end
-command! Cdbazelroot lua local buf=vim.api.nvim_buf_get_name(0); local path=buf ~= '' and vim.fn.fnamemodify(buf,':p:h') or vim.fn.getcwd(); local builds=vim.fs.find('BUILD.bazel',{path=path,upward=true,limit=16}); if #builds == 0 then vim.notify('No BUILD.bazel found upward from current buffer', vim.log.levels.ERROR); return end; local idx=(#builds >= 2) and 2 or 1; local root=vim.fs.dirname(builds[idx]); vim.cmd('lcd '..vim.fn.fnameescape(root))
+command! Cdbazelroot lua local root=_G.dotfiles_current_buffer_bazel_root(); if root then vim.cmd('lcd '..vim.fn.fnameescape(root)) else vim.notify('No BUILD.bazel found upward from current buffer', vim.log.levels.ERROR) end
 
 " Open last buffer with space space
 nnoremap <Leader><Leader> :b#<CR>
@@ -579,7 +616,7 @@ nmap P "ap
 set nocompatible
 
 " Insert markdown heading with current datetime
-nnoremap <leader>d i<C-R>=strftime("## %Y-%m-%d %H:%M")<CR><CR><esc>
+nnoremap <leader>t i<C-R>=strftime("## %Y-%m-%d %H:%M")<CR><CR><esc>
 
 " Open current file in github
 nmap <Leader>gh :GBrowse<CR>
@@ -705,15 +742,26 @@ command! -range=% HexRust <line1>,<line2>s/\v<([0-9A-Fa-f]{2})>/0x\1/g
 " Auto save whenever text is changed
 " autocmd TextChanged,TextChangedI <buffer> silent write
 
-" Toggle File Explorer on Ctrl-g
-nnoremap <C-g> :call NERDTreeToggleAndRefresh()<CR>
+" Toggle File Explorer on Ctrl-g rooted at the current buffer's Bazel root
+nnoremap <C-g> :call NERDTreeToggleBazelRoot()<CR>
 
 " Refresh file list every time its opened
-function! NERDTreeToggleAndRefresh()
-  execute 'NERDTreeToggle' fnameescape(getcwd())
-  if g:NERDTree.IsOpen()
-    :NERDTreeRefreshRoot
+function! NERDTreeToggleBazelRoot()
+  let l:root = luaeval('_G.dotfiles_current_buffer_bazel_root()')
+  if empty(l:root)
+    echoerr 'No BUILD.bazel found upward from current buffer'
+    return
   endif
+
+  if g:NERDTree.IsOpen()
+    let l:tree = g:NERDTree.ForCurrentTab()
+    if !empty(l:tree) && l:tree.getRoot().path.str() ==# l:root
+      NERDTreeClose
+      return
+    endif
+  endif
+
+  execute 'NERDTree' fnameescape(l:root)
 endfunction
 
 " find file in dir tree
