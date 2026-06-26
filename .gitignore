@@ -2,3 +2,6 @@
 PLAN_*.md
 
 agent-plans/
+.project
+.classpath
+.jdtls-bin/

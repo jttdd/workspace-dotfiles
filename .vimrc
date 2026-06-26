@@ -194,9 +194,10 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', 'gi', '<cmd>lua vim.lsp.buf.implementation()<CR>', opts)
   buf_set_keymap('n', '<C-k>', '<cmd>lua vim.lsp.buf.signature_help()<CR>', opts)
   buf_set_keymap('n', 'gt', '<cmd>lua vim.lsp.buf.type_definition()<CR>', opts)
-  buf_set_keymap('n', '<space>rn', '<cmd>lua vim.lsp.buf.rename()<CR>', opts)
+  buf_set_keymap('n', '<space>rn', '<cmd>lua dotfiles_lsp_rename_and_save_other_files()<CR>', opts)
   buf_set_keymap('n', '<space>a', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
   buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
+  buf_set_keymap('n', 'grn', '<cmd>lua dotfiles_lsp_rename_and_save_other_files()<CR>', opts)
   buf_set_keymap('n', '<space>e', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
   buf_set_keymap('n', '<C-p>', '<cmd>lua vim.diagnostic.jump({count = -1})<CR>', opts)
   buf_set_keymap('n', '<C-n>', '<cmd>lua vim.diagnostic.jump({count = 1})<CR>', opts)
@@ -210,6 +211,138 @@ local on_attach = function(client, bufnr)
 end
 
 _G.dotfiles_lsp_on_attach = on_attach
+
+local function workspace_edit_uris(edit)
+  local uris = {}
+
+  if edit.changes then
+    for uri, _ in pairs(edit.changes) do
+      uris[uri] = true
+    end
+  end
+
+  if edit.documentChanges then
+    for _, change in ipairs(edit.documentChanges) do
+      local text_document = change.textDocument
+      if text_document and text_document.uri then
+        uris[text_document.uri] = true
+      end
+    end
+  end
+
+  return uris
+end
+
+local function save_other_workspace_edit_buffers(edit, current_bufnr)
+  local saved = 0
+
+  for uri, _ in pairs(workspace_edit_uris(edit)) do
+    local bufnr = vim.uri_to_bufnr(uri)
+
+    if bufnr ~= current_bufnr and vim.api.nvim_buf_is_loaded(bufnr) then
+      vim.api.nvim_buf_call(bufnr, function()
+        vim.cmd("silent noautocmd update")
+      end)
+      saved = saved + 1
+    end
+  end
+
+  return saved
+end
+
+function _G.dotfiles_lsp_rename_and_save_other_files()
+  local current_bufnr = vim.api.nvim_get_current_buf()
+  local clients = vim.lsp.get_clients({
+    bufnr = current_bufnr,
+    method = "textDocument/rename",
+  })
+
+  if #clients == 0 then
+    vim.notify("[LSP] Rename, no matching language servers with rename capability.")
+    return
+  end
+
+  local win = vim.api.nvim_get_current_win()
+  local cword = vim.fn.expand("<cword>")
+
+  local function get_text_at_range(range, position_encoding)
+    return vim.api.nvim_buf_get_text(
+      current_bufnr,
+      range.start.line,
+      vim.lsp.util._get_line_byte_from_position(current_bufnr, range.start, position_encoding),
+      range["end"].line,
+      vim.lsp.util._get_line_byte_from_position(current_bufnr, range["end"], position_encoding),
+      {}
+    )[1]
+  end
+
+  local function try_use_client(idx, client)
+    if not idx or not client then
+      return
+    end
+
+    local function rename(name)
+      local params = vim.lsp.util.make_position_params(win, client.offset_encoding)
+      params.newName = name
+
+      client:request("textDocument/rename", params, function(err, result, ctx)
+        if err then
+          vim.notify(err.message, vim.log.levels.ERROR)
+        elseif not result then
+          vim.notify("Language server couldn't provide rename result", vim.log.levels.INFO)
+        else
+          vim.lsp.util.apply_workspace_edit(result, client.offset_encoding)
+          local saved = save_other_workspace_edit_buffers(result, current_bufnr)
+          if saved > 0 then
+            vim.notify(string.format("Saved %d renamed file(s)", saved), vim.log.levels.INFO)
+          end
+        end
+
+        try_use_client(next(clients, idx))
+      end, current_bufnr)
+    end
+
+    if client:supports_method("textDocument/prepareRename") then
+      local params = vim.lsp.util.make_position_params(win, client.offset_encoding)
+      client:request("textDocument/prepareRename", params, function(err, result)
+        if err or result == nil then
+          if next(clients, idx) then
+            try_use_client(next(clients, idx))
+          else
+            local msg = err and ("Error on prepareRename: " .. (err.message or "")) or "Nothing to rename"
+            vim.notify(msg, vim.log.levels.INFO)
+          end
+          return
+        end
+
+        local prompt_opts = { prompt = "New Name: " }
+        if result.placeholder then
+          prompt_opts.default = result.placeholder
+        elseif result.start then
+          prompt_opts.default = get_text_at_range(result, client.offset_encoding)
+        elseif result.range then
+          prompt_opts.default = get_text_at_range(result.range, client.offset_encoding)
+        else
+          prompt_opts.default = cword
+        end
+
+        vim.ui.input(prompt_opts, function(input)
+          if input and #input > 0 then
+            rename(input)
+          end
+        end)
+      end, current_bufnr)
+    else
+      vim.ui.input({ prompt = "New Name: ", default = cword }, function(input)
+        if input and #input > 0 then
+          rename(input)
+        end
+      end)
+    end
+  end
+
+  try_use_client(next(clients))
+end
 
 local function git_root()
   local ok, out = pcall(vim.fn.systemlist, "git rev-parse --show-toplevel")

@@ -1,3 +1,20 @@
+# SSH agent: stable socket path so tmux/sub-shells reuse the same agent.
+# If the socket is dead, start a fresh agent and relink. Then load id_github.
+set -gx SSH_AUTH_SOCK $HOME/.ssh/ssh_auth_sock
+
+ssh-add -l >/dev/null 2>&1
+if test $status -eq 2
+    set -l sock (ssh-agent -s | string match -r --groups-only 'SSH_AUTH_SOCK=([^;]+)')
+    ln -snf $sock $SSH_AUTH_SOCK
+end
+
+if test -f $HOME/.ssh/id_github
+    set -l fp (ssh-keygen -lf $HOME/.ssh/id_github.pub 2>/dev/null | awk '{print $2}')
+    if not ssh-add -l 2>/dev/null | string match -q "*$fp*"
+        ssh-add -q $HOME/.ssh/id_github 2>/dev/null
+    end
+end
+
 # Base16 Shell
 if status --is-interactive
     set BASE16_SHELL "$HOME/.config/base16-shell/"
@@ -8,9 +25,35 @@ end
 set -gx EDITOR nvim
 set -g fish_prompt_pwd_dir_length 0
 
+function fish_prompt
+    set -l last_status $status
+    set -l cwd (prompt_pwd)
+    set -l branch (command git symbolic-ref --quiet --short HEAD 2>/dev/null)
+
+    set_color blue
+    printf '%s' "$cwd"
+
+    if test -n "$branch"
+        set_color brblack
+        printf ' ['
+        set_color bryellow
+        printf '%s' "$branch"
+        set_color brblack
+        printf ']'
+    end
+
+    if test $last_status -ne 0
+        set_color red
+        printf ' [%s]' "$last_status"
+    end
+
+    set_color normal
+    printf '> '
+end
+
 # Start lspmux server if not already running
-if not pgrep -f "lspmux server" > /dev/null
-    nohup ~/.cargo/bin/lspmux server > ~/.lspmux.log 2>&1 &
+if not pgrep -f "lspmux server" >/dev/null
+    nohup ~/.cargo/bin/lspmux server >~/.lspmux.log 2>&1 &
     disown
 end
 
