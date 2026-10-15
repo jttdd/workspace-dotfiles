@@ -3,6 +3,7 @@ call plug#begin()
 
 " Git
 Plug 'sindrets/diffview.nvim'
+Plug 'lewis6991/gitsigns.nvim'
 
 " completion (blink.cmp)
 Plug 'Saghen/blink.cmp', { 'tag': 'v1.*' }
@@ -46,6 +47,145 @@ Plug 'ojroques/vim-oscyank'
 
 call plug#end()
 
+lua << END
+local gitsigns = require("gitsigns")
+
+-- Use one comparison base for the file pane, buffer diffs, and hunk navigation.
+vim.g.dotfiles_gitsigns_base = vim.g.dotfiles_gitsigns_base or "HEAD"
+gitsigns.setup({
+  base = vim.g.dotfiles_gitsigns_base,
+  signcolumn = true,
+  linehl = false,
+})
+
+vim.api.nvim_create_user_command("GitsignsBase", function(opts)
+  local root = vim.fs.root(0, ".git") or vim.fs.root(vim.fn.getcwd(), ".git")
+  if not root then
+    vim.notify("GitsignsBase: not in a Git repository", vim.log.levels.ERROR)
+    return
+  end
+
+  local base = opts.args ~= "" and opts.args or "HEAD"
+  local result = vim.system(
+    { "git", "rev-parse", "--verify", "--end-of-options", base .. "^{commit}" },
+    { cwd = root, text = true }
+  ):wait()
+  if result.code ~= 0 then
+    vim.notify("GitsignsBase: invalid commit " .. base, vim.log.levels.ERROR)
+    return
+  end
+
+  gitsigns.change_base(base, true, function(err)
+    if err then
+      vim.notify("GitsignsBase: " .. err, vim.log.levels.ERROR)
+      return
+    end
+    vim.g.dotfiles_gitsigns_base = base
+    vim.notify("Git comparison base: " .. base)
+  end)
+end, { desc = "Set the Git comparison commit for all buffers (default: HEAD)", nargs = "?" })
+
+vim.api.nvim_create_user_command("GitsignsFiles", function()
+  local api = vim.api
+  local bufnr = api.nvim_get_current_buf()
+  local view = vim.fn.winsaveview()
+  local empty_buffer = (
+    api.nvim_buf_get_name(bufnr) == ""
+    and vim.bo[bufnr].buftype == ""
+    and not vim.bo[bufnr].modified
+    and api.nvim_buf_line_count(bufnr) == 1
+    and vim.fn.getline(1) == ""
+  )
+  local existing_windows = {}
+  for _, winid in ipairs(api.nvim_list_wins()) do
+    existing_windows[winid] = true
+  end
+
+  -- Gitsigns always selects its first file before completing the open.
+  gitsigns.diff(vim.g.dotfiles_gitsigns_base, nil, { diff = "none" }, function(err)
+    if err then
+      vim.notify("GitsignsFiles: " .. err, vim.log.levels.ERROR)
+      return
+    end
+
+    local panel_win, file_win
+    for _, winid in ipairs(api.nvim_tabpage_list_wins(0)) do
+      if api.nvim_win_get_config(winid).relative == "" then
+        local win_buf = api.nvim_win_get_buf(winid)
+        if vim.bo[win_buf].filetype == "gitsigns-diff" then
+          if not existing_windows[winid] then
+            panel_win = winid
+          end
+        else
+          file_win = winid
+        end
+      end
+    end
+
+    local current_win = api.nvim_get_current_win()
+    if not panel_win or not file_win then
+      return
+    end
+    if current_win ~= panel_win and current_win ~= file_win then
+      return
+    end
+    if not api.nvim_buf_is_valid(bufnr) then
+      if not empty_buffer then
+        return
+      end
+      -- Gitsigns wipes the pristine startup buffer when it reuses its window.
+      bufnr = api.nvim_create_buf(true, false)
+    end
+
+    api.nvim_set_current_win(file_win)
+    api.nvim_win_set_buf(file_win, bufnr)
+    vim.fn.winrestview(view)
+  end)
+end, { desc = "Open the Git file pane and preserve the current buffer" })
+
+vim.api.nvim_create_user_command("GitsignsToggleLinehl", function()
+  vim.cmd("Gitsigns toggle_linehl")
+end, { desc = "Toggle Gitsigns line highlights" })
+
+vim.api.nvim_create_user_command("GitsignsPRBase", function(opts)
+  local root = vim.fs.root(0, ".git")
+  if not root then
+    vim.notify(
+      "GitsignsPRBase: current buffer is not in a Git repository",
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  local base_ref = opts.args ~= "" and opts.args or "origin/HEAD"
+  local result = vim.system(
+    { "git", "merge-base", "HEAD", base_ref },
+    { cwd = root, text = true }
+  ):wait()
+  local merge_base = vim.trim(result.stdout or "")
+
+  if result.code ~= 0 or merge_base == "" then
+    local detail = vim.trim(result.stderr or "")
+    if detail == "" then
+      detail = "no merge base found for HEAD and " .. base_ref
+    end
+    vim.notify("GitsignsPRBase: " .. detail, vim.log.levels.ERROR)
+    return
+  end
+
+  vim.cmd.GitsignsBase(merge_base)
+end, {
+  desc = "Use the PR merge base for Git comparisons",
+  nargs = "?",
+})
+
+require("diffview").setup({
+  default_args = {
+    DiffviewOpen = { "--imply-local" },
+  },
+})
+END
+
 " Fish doesn't play all that well with others
 set shell=/bin/bash
 
@@ -57,6 +197,8 @@ function! DotfilesApplyThemeHighlights() abort
   " Base16 Ashes makes comments too close to the background for long editing sessions.
   highlight Comment guifg=#a7adba ctermfg=145
   highlight SpecialComment guifg=#b7beca ctermfg=146
+  highlight GitSignsChangeLn guifg=#95aec7 guibg=#393f45 ctermfg=110 ctermbg=237
+  highlight GitSignsStagedChangeLn guifg=#95aec7 guibg=#393f45 ctermfg=110 ctermbg=237
 endfunction
 
 " Give blink docs a softer pastel surface without changing the main theme.
@@ -199,12 +341,28 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', 'gr', '<cmd>lua vim.lsp.buf.references()<CR>', opts)
   buf_set_keymap('n', 'grn', '<cmd>lua dotfiles_lsp_rename_and_save_other_files()<CR>', opts)
   buf_set_keymap('n', '<space>e', '<cmd>lua vim.diagnostic.open_float()<CR>', opts)
-  buf_set_keymap('n', '<C-p>', '<cmd>lua vim.diagnostic.jump({count = -1})<CR>', opts)
-  buf_set_keymap('n', '<C-n>', '<cmd>lua vim.diagnostic.jump({count = 1})<CR>', opts)
+  buf_set_keymap('n', '<C-]>', '<cmd>lua vim.diagnostic.jump({count = -1})<CR>', opts)
+  buf_set_keymap('n', '<C-[>', '<cmd>lua vim.diagnostic.jump({count = 1})<CR>', opts)
+  -- Ctrl-[ also registers an Escape alias; keep plain Escape unchanged.
+  buf_set_keymap('n', '<Esc>', '<Esc>', opts)
   buf_set_keymap('n', '<space>q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
   -- buf_set_keymap("n", "<space>f", "<cmd>lua vim.lsp.buf.formatting()<CR>", opts)
   buf_set_keymap('n', '<space>h', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
 
+  if client.name == "rust_analyzer" then
+    vim.keymap.set("n", "<Leader>k", function()
+      local sent = client:request("rust-analyzer/reloadWorkspace", nil, function(err)
+        if err then
+          vim.notify("Rust workspace reload failed: " .. (err.message or vim.inspect(err)), vim.log.levels.ERROR)
+          return
+        end
+        vim.notify("Rust workspace reload requested")
+      end, bufnr)
+      if not sent then
+        vim.notify("Rust analyzer is not connected", vim.log.levels.WARN)
+      end
+    end, { buffer = bufnr, silent = true, desc = "Reload Rust workspace" })
+  end
 
   -- Forward to other plugins
   -- require'completion'.on_attach(client)
@@ -389,12 +547,44 @@ local function rust_root_dir(bufnr, on_dir)
   on_dir(root)
 end
 
+-- Re-sourcing must keep the plugin's hook instead of wrapping our own again.
+if _G.dotfiles_rust_analyzer_before_init == nil then
+  _G.dotfiles_rust_analyzer_before_init = vim.lsp.config.rust_analyzer.before_init or false
+end
+
 -- Configure rust_analyzer using new vim.lsp.config API
 vim.lsp.config('rust_analyzer', {
   cmd = { 'lspmux', 'client', '--server-path', 'rust-analyzer' },
   filetypes = { 'rust' },
   root_dir = rust_root_dir,
   on_attach = on_attach,
+  before_init = function(params, config)
+    if config.root_dir then
+      local manifest = config.root_dir .. "/domains/streaming/shared/libs/libstreaming/rust/Cargo.toml"
+      local ok, lines = pcall(vim.fn.readfile, manifest)
+      if ok then
+        local in_features = false
+        for _, line in ipairs(lines) do
+          local section = line:match("^%s*%[([^%]]+)%]")
+          if section then
+            in_features = vim.trim(section) == "features"
+          elseif in_features and line:match("^%s*byoa%s*=") then
+            local cargo = config.settings["rust-analyzer"].cargo
+            cargo.features = cargo.features or {}
+            if cargo.features ~= "all" and not vim.list_contains(cargo.features, "libstreaming/byoa") then
+              table.insert(cargo.features, "libstreaming/byoa")
+            end
+            break
+          end
+        end
+      end
+    end
+
+    local before_init = _G.dotfiles_rust_analyzer_before_init
+    if before_init then
+      before_init(params, config)
+    end
+  end,
   settings = {
     ["rust-analyzer"] = {
       check = {
@@ -427,7 +617,7 @@ local include_path = root_dir .. "/include"
 
 -- Configure gopls using new vim.lsp.config API
 vim.lsp.config('gopls', {
-    cmd = { "dd-gopls" },
+    cmd = { "gopls-rs" },
     cmd_env = {
       CGO_ENABLED = "1",
       CGO_CFLAGS = "-I" .. include_path,
@@ -520,7 +710,11 @@ nmap <Leader>P "+P
 vmap <Leader>p "+p
 vmap <Leader>P "+P
 
-nnoremap <Leader>d :DiffviewOpen<CR>
+nnoremap <silent> <C-p> <Cmd>Gitsigns nav_hunk prev<CR>
+nnoremap <silent> <C-n> <Cmd>Gitsigns nav_hunk next<CR>
+nnoremap <silent> gu <Cmd>Gitsigns diffthis unified=true<CR>
+nnoremap <silent> <Leader>d <Cmd>Gitsigns preview_hunk<CR>
+nnoremap <silent> <Leader>D <Cmd>GitsignsFiles<CR>
 
 " Use system clipboard
 set clipboard=unnamedplus

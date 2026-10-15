@@ -1,0 +1,3 @@
+" Attribute macros can accept documentation comments in their input.
+syntax cluster rustAttributeContents remove=rustCommentLineDocError,rustCommentBlockDocError
+syntax cluster rustAttributeContents add=rustCommentLineDoc,rustCommentBlockDoc

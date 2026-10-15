@@ -28,6 +28,7 @@
 
   # diff
   d = diff
+  du = !~/dotfiles/scripts/git-diff-untracked.sh
 
   pull-head = "!git fetch origin $(git rev-parse --abbrev-ref HEAD) && git pull origin $(git rev-parse --abbrev-ref HEAD)"
 

@@ -1,0 +1,6 @@
+WRN 2026-10-07T18:41:55.607 ?.4        server_start:199: Failed to start server: operation not permitted: /tmp/nvim.bits/wwLRhF/nvim.4.0
+WRN 2026-10-07T18:42:29.761 ?.4        server_start:199: Failed to start server: operation not permitted: /tmp/nvim.bits/sqvU6a/nvim.4.0
+WRN 2026-10-07T18:44:15.083 ?.4        server_start:199: Failed to start server: operation not permitted: /tmp/nvim.bits/vFKtxX/nvim.4.0
+WRN 2026-10-07T18:45:11.152 ?.4        server_start:199: Failed to start server: operation not permitted: /tmp/nvim.bits/yvRP7N/nvim.4.0
+WRN 2026-10-08T14:49:22.169 ?.4        server_start:199: Failed to start server: operation not permitted: /tmp/nvim.bits/ia35wK/nvim.4.0
+WRN 2026-10-08T14:53:17.695 ?.4        server_start:199: Failed to start server: operation not permitted: /tmp/nvim.bits/6I1UW1/nvim.4.0

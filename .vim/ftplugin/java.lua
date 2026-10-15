@@ -1,6 +1,12 @@
 local on_attach = _G.dotfiles_lsp_on_attach
 
-local refresh_jobs = {}
+local java_lsp_state = rawget(_G, "dotfiles_java_lsp_state") or {}
+java_lsp_state.automatic_refreshes = java_lsp_state.automatic_refreshes or {}
+java_lsp_state.refresh_jobs = java_lsp_state.refresh_jobs or {}
+rawset(_G, "dotfiles_java_lsp_state", java_lsp_state)
+
+local automatic_refreshes = java_lsp_state.automatic_refreshes
+local refresh_jobs = java_lsp_state.refresh_jobs
 local source_dirs_cache = {}
 
 local logs_backend_source_root_whitelist = {
@@ -232,9 +238,18 @@ local function is_bazel_ignored(rel, ignored_prefixes)
 end
 
 local function is_logs_backend_root(root_dir)
-  local is_logs_backend = vim.fn.fnamemodify(root_dir, ":t") == "logs-backend"
-  local has_streaming_domain = vim.fn.isdirectory(root_dir .. "/domains/streaming") == 1
-  return is_logs_backend and has_streaming_domain
+  if vim.fn.isdirectory(root_dir .. "/domains/streaming") == 0 then
+    return false
+  end
+
+  local workspace_pattern = [=[workspace%s*%(%s*name%s*=%s*["']com_datadoghq_logs_backend["']]=]
+  for _, marker in ipairs({ "WORKSPACE", "WORKSPACE.bazel" }) do
+    local ok, lines = pcall(vim.fn.readfile, root_dir .. "/" .. marker)
+    if ok and table.concat(lines, "\n"):match(workspace_pattern) then
+      return true
+    end
+  end
+  return false
 end
 
 local function source_search_roots(root_dir)
@@ -403,6 +418,11 @@ local function project_file_needs_bootstrap(root_dir)
   or content:match("intellij%-plugins") == nil
 end
 
+local function classpath_jar_is_readable(root_dir, jar)
+  local path = vim.startswith(jar, "/") and jar or root_dir .. "/" .. jar
+  return vim.fn.filereadable(path) == 1
+end
+
 local function needs_eclipse_bootstrap(root_dir)
   if vim.fn.filereadable(root_dir .. "/.settings/org.eclipse.jdt.core.prefs") == 0 then
     return true
@@ -417,9 +437,10 @@ local function needs_eclipse_bootstrap(root_dir)
     return true
   end
 
+  local is_logs_backend = is_logs_backend_root(root_dir)
   local expected_sources = {}
   local seen_sources = {}
-  if is_logs_backend_root(root_dir) then
+  if is_logs_backend then
     for _, rel in ipairs(discover_source_dirs(root_dir)) do
       expected_sources[rel] = true
     end
@@ -427,24 +448,31 @@ local function needs_eclipse_bootstrap(root_dir)
 
   local has_source_entry = false
   local has_java_25_runtime = false
+  local has_library_entry = false
   for _, line in ipairs(lines) do
     local source = line:match('kind="src"%s+path="([^"]+)"')
     if source then
       has_source_entry = true
       seen_sources[source] = true
-      if is_logs_backend_root(root_dir) and not expected_sources[source] then
+      if is_logs_backend and not expected_sources[source] then
         return true
       end
     end
 
     has_java_25_runtime = has_java_25_runtime or line:match("JavaSE%-25") ~= nil
     local jar = line:match('kind="lib"%s+path="([^"]+)"')
-    if jar and sourcepath_for_jar(root_dir, jar) and not line:match('sourcepath="') then
-      return true
+    if jar then
+      if is_logs_backend and not classpath_jar_is_readable(root_dir, jar) then
+        return true
+      end
+      has_library_entry = true
+      if sourcepath_for_jar(root_dir, jar) and not line:match('sourcepath="') then
+        return true
+      end
     end
   end
 
-  if is_logs_backend_root(root_dir) then
+  if is_logs_backend then
     for source in pairs(expected_sources) do
       if not seen_sources[source] then
         return true
@@ -452,7 +480,8 @@ local function needs_eclipse_bootstrap(root_dir)
     end
   end
 
-  return not (has_source_entry and has_java_25_runtime)
+  local has_required_libraries = not is_logs_backend or has_library_entry
+  return not (has_source_entry and has_java_25_runtime and has_required_libraries)
 end
 
 local function existing_classpath_jars(root_dir)
@@ -462,13 +491,17 @@ local function existing_classpath_jars(root_dir)
   end
 
   local jars = {}
+  local has_unreadable_jar = false
   for _, line in ipairs(lines) do
     local jar = line:match('kind="lib"%s+path="([^"]+)"')
     if jar then
       table.insert(jars, jar)
+      if not classpath_jar_is_readable(root_dir, jar) then
+        has_unreadable_jar = true
+      end
     end
   end
-  return jars
+  return jars, has_unreadable_jar
 end
 
 local function bazel_build_flags(workspace_root)
@@ -498,6 +531,10 @@ local function bzl_cmd(workspace_root, command, args)
   local cmd = { "bzl", command }
   if command == "build" or command == "cquery" then
     vim.list_extend(cmd, bazel_build_flags(workspace_root))
+  end
+  -- Classpath manifests reference transitive outputs that minimal remote downloads leave absent.
+  if command == "build" then
+    table.insert(cmd, "--remote_download_outputs=all")
   end
   vim.list_extend(cmd, args)
   return cmd
@@ -535,20 +572,26 @@ local function resolve_bazel_path(workspace_root, raw_path)
   return nil
 end
 
-local function merge_unique(first, second)
-  local merged = {}
-  local seen = {}
-
-  for _, list in ipairs({ first or {}, second or {} }) do
-    for _, value in ipairs(list) do
-      if value ~= "" and not seen[value] then
-        table.insert(merged, value)
-        seen[value] = true
-      end
-    end
+local function command_failure_message(stage, result)
+  local stderr = vim.trim(result.stderr or "")
+  local stdout = vim.trim(result.stdout or "")
+  local details = stderr
+  if stdout ~= "" then
+    details = details ~= "" and details .. "\n" .. stdout or stdout
   end
 
-  return merged
+  local exit_status = result.code ~= nil and " (exit " .. result.code .. ")" or ""
+  if details == "" then
+    return stage .. " failed" .. exit_status
+  end
+  return stage .. " failed" .. exit_status .. ":\n" .. details
+end
+
+local function combine_messages(first, second)
+  if first and second then
+    return first .. "\n" .. second
+  end
+  return first or second
 end
 
 local function bazel_package_label(workspace_root, package_dir)
@@ -602,51 +645,57 @@ end
 local function read_repo_classpath_async(workspace_root, target, on_done)
   local classpath_target = target .. ".classpath"
   vim.system(bzl_cmd(workspace_root, "build", { classpath_target }), { cwd = workspace_root }, function(build_r)
-    if build_r.code ~= 0 then
-      vim.schedule(function() on_done({}) end)
-      return
-    end
-
-    vim.system(
-      bzl_cmd(workspace_root, "cquery", { "--output=files", classpath_target }),
-      { cwd = workspace_root },
-      function(cquery_r)
-        if cquery_r.code ~= 0 then
-          vim.schedule(function() on_done({}) end)
-          return
-        end
-
-        vim.schedule(function()
-          local classpath_file
-          for _, line in ipairs(vim.split(cquery_r.stdout or "", "\n", { plain = true })) do
-            if line:match("%.classpath$") then
-              classpath_file = resolve_bazel_path(workspace_root, line)
-              break
-            end
-          end
-
-          if not classpath_file then
-            on_done({})
-            return
-          end
-
-          local ok, entries = pcall(vim.fn.readfile, classpath_file)
-          if not ok then
-            on_done({})
-            return
-          end
-
-          local jars = {}
-          for _, entry in ipairs(entries) do
-            local jar = resolve_bazel_path(workspace_root, vim.trim(entry))
-            if jar then
-              table.insert(jars, jar)
-            end
-          end
-          on_done(jars)
-        end)
+    vim.schedule(function()
+      if build_r.code ~= 0 then
+        on_done({}, command_failure_message("Bazel classpath build for " .. classpath_target, build_r))
+        return
       end
-    )
+
+      vim.system(
+        bzl_cmd(workspace_root, "cquery", { "--output=files", classpath_target }),
+        { cwd = workspace_root },
+        function(cquery_r)
+          vim.schedule(function()
+            if cquery_r.code ~= 0 then
+              on_done({}, command_failure_message("Bazel classpath query for " .. classpath_target, cquery_r))
+              return
+            end
+
+            local classpath_file
+            for _, line in ipairs(vim.split(cquery_r.stdout or "", "\n", { plain = true })) do
+              if line:match("%.classpath$") then
+                classpath_file = resolve_bazel_path(workspace_root, line)
+                break
+              end
+            end
+
+            if not classpath_file then
+              on_done({}, "Bazel did not return a readable classpath file for " .. classpath_target)
+              return
+            end
+
+            local ok, entries = pcall(vim.fn.readfile, classpath_file)
+            if not ok then
+              on_done({}, "Could not read Bazel classpath file " .. classpath_file)
+              return
+            end
+
+            local jars = {}
+            for _, entry in ipairs(entries) do
+              local jar = resolve_bazel_path(workspace_root, vim.trim(entry))
+              if jar then
+                table.insert(jars, jar)
+              end
+            end
+            if #jars == 0 then
+              on_done({}, "Bazel classpath file contained no readable JARs: " .. classpath_file)
+              return
+            end
+            on_done(jars, nil)
+          end)
+        end
+      )
+    end)
   end)
 end
 
@@ -654,14 +703,14 @@ local function read_javainfo_classpath_async(workspace_root, target, on_done)
   vim.system(
     bzl_cmd(workspace_root, "cquery", {
       "--output=starlark",
-      '--starlark:expr="\\n".join([f.path for f in target[JavaInfo].transitive_compile_time_jars.to_list()])',
+      '--starlark:expr="\\n".join([f.path for f in providers(target)["@@rules_java//java/private:java_info.bzl%JavaInfo"].transitive_compile_time_jars.to_list()])',
       target,
     }),
     { cwd = workspace_root },
     function(cquery_r)
       vim.schedule(function()
         if cquery_r.code ~= 0 then
-          on_done({})
+          on_done({}, command_failure_message("Bazel JavaInfo query for " .. target, cquery_r))
           return
         end
 
@@ -672,73 +721,91 @@ local function read_javainfo_classpath_async(workspace_root, target, on_done)
             table.insert(jars, jar)
           end
         end
-        on_done(jars)
+        if #jars == 0 then
+          on_done({}, "Bazel JavaInfo query returned no readable JARs for " .. target)
+          return
+        end
+        on_done(jars, nil)
       end)
     end
   )
 end
 
-local function finish_refresh(on_done, changed)
-  vim.schedule(function() on_done(changed) end)
+local function finish_refresh(on_done, result)
+  vim.schedule(function() on_done(result) end)
 end
 
 local function refresh_bazel_classpath_async(root_dir, source_path, on_done)
   local workspace_root = bazel_workspace(root_dir)
   if not workspace_root then
-    finish_refresh(on_done, false)
+    finish_refresh(on_done, { error = "Could not locate the Bazel workspace" })
     return
   end
 
   local package_dir = nearest_build_root(source_path)
   if not package_dir or not starts_with_path(normalize(package_dir), normalize(workspace_root)) then
-    finish_refresh(on_done, false)
+    finish_refresh(on_done, { error = "Could not locate a Bazel package for " .. source_path })
     return
   end
 
   local package_label = bazel_package_label(workspace_root, package_dir)
-  local job_key = root_dir .. ":" .. package_label
-  if refresh_jobs[job_key] then
-    finish_refresh(on_done, false)
+  if refresh_jobs[root_dir] then
+    finish_refresh(on_done, { in_progress = true })
     return
   end
-  refresh_jobs[job_key] = true
+  refresh_jobs[root_dir] = true
 
-  local function finish(changed)
-    refresh_jobs[job_key] = nil
-    finish_refresh(on_done, changed)
+  local function finish(result)
+    refresh_jobs[root_dir] = nil
+    finish_refresh(on_done, result)
   end
 
   vim.system(
     { "bzl", "query", package_label .. ":all", "--output=label_kind" },
     { cwd = workspace_root },
     function(query_r)
-      if query_r.code ~= 0 then
-        finish(false)
-        return
-      end
-
-      local target = pick_bazel_target(vim.split(query_r.stdout or "", "\n", { plain = true }), normalize(source_path))
-      if not target then
-        finish(false)
-        return
-      end
-
-      vim.system(bzl_cmd(workspace_root, "build", { target }), { cwd = workspace_root }, function(build_r)
-        if build_r.code ~= 0 then
-          finish(false)
+      vim.schedule(function()
+        if query_r.code ~= 0 then
+          finish({ error = command_failure_message("Bazel target query for " .. package_label, query_r) })
           return
         end
 
-        read_repo_classpath_async(workspace_root, target, function(repo_jars)
-          read_javainfo_classpath_async(workspace_root, target, function(javainfo_jars)
-            local jars = merge_unique(repo_jars, javainfo_jars)
-            if #jars == 0 then
-              finish(false)
+        local target = pick_bazel_target(
+          vim.split(query_r.stdout or "", "\n", { plain = true }),
+          normalize(source_path)
+        )
+        if not target then
+          finish({ error = "Could not find a Java target in " .. package_label })
+          return
+        end
+
+        vim.system(bzl_cmd(workspace_root, "build", { target }), { cwd = workspace_root }, function(build_r)
+          vim.schedule(function()
+            if build_r.code ~= 0 then
+              finish({ error = command_failure_message("Bazel build for " .. target, build_r) })
               return
             end
 
-            local changed = write_eclipse_files(root_dir, jars)
-            finish(changed)
+            read_repo_classpath_async(workspace_root, target, function(repo_jars, repo_error)
+              if #repo_jars > 0 then
+                local changed = write_eclipse_files(root_dir, repo_jars)
+                finish({ changed = changed })
+                return
+              end
+
+              read_javainfo_classpath_async(workspace_root, target, function(javainfo_jars, javainfo_error)
+                if #javainfo_jars == 0 then
+                  finish({
+                    error = combine_messages(repo_error, javainfo_error)
+                    or "Bazel returned no readable compile-time JARs for " .. target,
+                  })
+                  return
+                end
+
+                local changed = write_eclipse_files(root_dir, javainfo_jars)
+                finish({ changed = changed })
+              end)
+            end)
           end)
         end)
       end)
@@ -753,9 +820,18 @@ local function bazel_remote_jdk_25(root_dir)
   end
 
   local execroot = bazel_execution_root(workspace_root)
-  for _, candidate in ipairs(vim.fn.glob(execroot .. "/external/remote_jdk25_*", false, true)) do
-    if vim.fn.executable(candidate .. "/bin/java") == 1 then
-      return candidate
+  local output_base = execroot:match("^(.*)/execroot/[^/]+$")
+  if not output_base then
+    return nil
+  end
+
+  for _, candidate in ipairs(vim.fn.glob(output_base .. "/external/remote_jdk25_*", false, true)) do
+    local has_java = vim.fn.executable(candidate .. "/bin/java") == 1
+    local has_jrt_fs = vim.fn.filereadable(candidate .. "/lib/jrt-fs.jar") == 1
+    local has_modules = vim.fn.filereadable(candidate .. "/lib/modules") == 1
+    local has_release = vim.fn.filereadable(candidate .. "/release") == 1
+    if has_java and has_jrt_fs and has_modules and has_release then
+      return normalize(candidate)
     end
   end
   return nil
@@ -831,8 +907,12 @@ local function jdtls_config(root_dir)
 end
 
 local function restart_jdtls(cfg)
+  local root_dir = normalize(cfg.root_dir)
   for _, client in ipairs(vim.lsp.get_clients({ name = "jdtls" })) do
-    client:stop()
+    local client_root = client.config and client.config.root_dir
+    if client_root and normalize(client_root) == root_dir then
+      client:stop()
+    end
   end
 
   vim.defer_fn(function()
@@ -864,6 +944,30 @@ local function stop_stale_nested_jdtls_clients(root_dir, source_path)
   end
 end
 
+local function handle_bazel_classpath_refresh(root_dir, result)
+  if result.in_progress then
+    vim.notify("[jdtls] A classpath refresh is already running.", vim.log.levels.INFO)
+    return
+  end
+
+  automatic_refreshes[root_dir] = nil
+  if result.error then
+    vim.notify("[jdtls] " .. result.error, vim.log.levels.ERROR)
+    return
+  end
+
+  local result_description = result.changed and "updated" or "refreshed"
+  vim.notify("[jdtls] Classpath " .. result_description .. ", restarting...", vim.log.levels.INFO)
+  restart_jdtls(jdtls_config(root_dir))
+end
+
+local function start_bazel_classpath_refresh(root_dir, source_path)
+  vim.notify("[jdtls] Refreshing Bazel classpath...", vim.log.levels.INFO)
+  refresh_bazel_classpath_async(root_dir, source_path, function(result)
+    handle_bazel_classpath_refresh(root_dir, result)
+  end)
+end
+
 pcall(vim.api.nvim_buf_del_user_command, 0, "JdtlsRefreshClasspath")
 vim.api.nvim_buf_create_user_command(0, "JdtlsRefreshClasspath", function()
   local bufname = vim.api.nvim_buf_get_name(0)
@@ -872,20 +976,12 @@ vim.api.nvim_buf_create_user_command(0, "JdtlsRefreshClasspath", function()
     return
   end
 
-  vim.notify("[jdtls] Refreshing Bazel classpath...", vim.log.levels.INFO)
   if not is_bazel_project_root(root) then
     vim.notify("[jdtls] Current Java root is not a Bazel project.", vim.log.levels.INFO)
     return
   end
 
-  refresh_bazel_classpath_async(root, bufname, function(changed)
-    if changed then
-      vim.notify("[jdtls] Classpath updated, restarting...", vim.log.levels.INFO)
-      restart_jdtls(jdtls_config(root))
-    else
-      vim.notify("[jdtls] Classpath unchanged.", vim.log.levels.INFO)
-    end
-  end)
+  start_bazel_classpath_refresh(root, bufname)
 end, {})
 
 local ok, jdtls = pcall(require, "jdtls")
@@ -899,13 +995,22 @@ if not root then
   return
 end
 
+local should_refresh_classpath = false
 if is_bazel_project_root(root) then
   remove_stale_nested_eclipse_files(root, bufname)
   stop_stale_nested_jdtls_clients(root, bufname)
 
+  local classpath_jars, has_unreadable_classpath_jar = existing_classpath_jars(root)
   if needs_eclipse_bootstrap(root) then
-    write_eclipse_files(root, existing_classpath_jars(root))
+    write_eclipse_files(root, classpath_jars)
   end
+  should_refresh_classpath = is_logs_backend_root(root)
+    and (#classpath_jars == 0 or has_unreadable_classpath_jar or not bazel_remote_jdk_25(root))
 end
 
 jdtls.start_or_attach(jdtls_config(root))
+
+if should_refresh_classpath and not automatic_refreshes[root] then
+  automatic_refreshes[root] = true
+  start_bazel_classpath_refresh(root, bufname)
+end

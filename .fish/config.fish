@@ -1,17 +1,23 @@
 # SSH agent: stable socket path so tmux/sub-shells reuse the same agent.
-# If the socket is dead, start a fresh agent and relink. Then load id_github.
-set -gx SSH_AUTH_SOCK $HOME/.ssh/ssh_auth_sock
+# Interactive shells use the stable path maintained by the workspace socket keeper.
+# Non-interactive shells must preserve the inherited forwarded-agent socket.
+if status --is-interactive
+    set -gx SSH_AUTH_SOCK $HOME/.ssh/ssh_auth_sock
 
-ssh-add -l >/dev/null 2>&1
-if test $status -eq 2
-    set -l sock (ssh-agent -s | string match -r --groups-only 'SSH_AUTH_SOCK=([^;]+)')
-    ln -snf $sock $SSH_AUTH_SOCK
-end
+# Only start a workspace-local fallback agent outside an SSH session.
+    if not set -q SSH_CONNECTION
+        ssh-add -l >/dev/null 2>&1
+        if test $status -eq 2
+            set -l sock (ssh-agent -s | string match -r --groups-only 'SSH_AUTH_SOCK=([^;]+)')
+            ln -snf $sock $SSH_AUTH_SOCK
+        end
 
-if test -f $HOME/.ssh/id_github
-    set -l fp (ssh-keygen -lf $HOME/.ssh/id_github.pub 2>/dev/null | awk '{print $2}')
-    if not ssh-add -l 2>/dev/null | string match -q "*$fp*"
-        ssh-add -q $HOME/.ssh/id_github 2>/dev/null
+        if test -f $HOME/.ssh/id_github
+            set -l fp (ssh-keygen -lf $HOME/.ssh/id_github.pub 2>/dev/null | awk '{print $2}')
+            if not ssh-add -l 2>/dev/null | string match -q "*$fp*"
+                ssh-add -q $HOME/.ssh/id_github 2>/dev/null
+            end
+        end
     end
 end
 
@@ -82,3 +88,6 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv fish)"
 
 # Ensure ~/.local/bin is at the front of PATH (after aliases that may modify PATH)
 fish_add_path --prepend --move ~/.local/bin
+
+# Pi
+fish_add_path --prepend "/home/bits/.npm-global/bin"

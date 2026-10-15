@@ -27,7 +27,7 @@
     - Always add documentation to public items
     - Keep public/shared API docs general: describe what the member does for any caller, not one caller's use case. Put use-case-specific "why" at the call site (or in config), not on the general-purpose API.
     - Don't remove existing unrelated comments
-- Order matters for readability (even if it doesn't affect semantics). On the first read, a file is read top-down, so put important things near the top. The main function goes first.
+    - Order matters for readability (even if it doesn't affect semantics). On the first read, a file is read top-down, so put important things near the top. The main function goes first.
     - Helpers and supporting fns go below their callers, not above — the caller is the more relevant entry point, the helper is an implementation detail.
     - The whole file should mirror runtime flow: entry point → dispatcher → branches → utilities. The reader walks down the file the same way control flows.
     - For a dispatcher (match/switch that routes to handlers), list the handler fns below it in the **same order as the match arms**. The reader scans the match, then scrolls straight down — no hunting.
